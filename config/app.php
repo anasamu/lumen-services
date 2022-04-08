@@ -1,0 +1,25 @@
+<?php
+
+return [
+    'SERVICES_NAME' => env('SERVICES_NAME'),
+    'SERVICES_VERSION' => env('SERVICES_VERSION'),
+    'SERVICES_DESC' => env('SERVICES_DESCRIPTION'),
+    'SERVICES_SECRET_KEY' => env('SERVICES_SECRET_KEY'),
+    'APP_KEY' => env('APP_KEY'),
+    'APP_DEBUG' => env('APP_DEBUG'),
+    'APP_LOCALE' => env('APP_LOCALE'),
+    'APP_TIMEZONE' => env('APP_TIMEZONE'),
+    'APP_PAGINATION_LIMIT' => env('APP_PAGINATION_LIMIT'),
+    'DB_HOST' => env('DB_HOST'),
+    'DB_PORT' => env('DB_PORT'),
+    'DB_USERNAME' => env('DB_USERNAME'),
+    'DB_PASSWORD' => env('DB_PASSWORD'),
+    'DB_DATABASE_LIVE' => env('DB_DATABASE_LIVE'),
+    'DB_DATABASE_SANDBOX' => env('DB_DATABASE_SANDBOX'),
+    'FILESYSTEM_DISK' => env('FILESYSTEM_DISK'),
+    'AWS_ACCESS_KEY_ID' => env('AWS_ACCESS_KEY_ID'),
+    'AWS_SECRET_ACCESS_KEY' => env('AWS_SECRET_ACCESS_KEY'),
+    'AWS_DEFAULT_REGION' => env('AWS_DEFAULT_REGION'),
+    'AWS_BUCKET' => env('AWS_BUCKET'),
+    'AWS_URL' => env('AWS_URL')
+];
