@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Traits\Sandbox;
 use Closure;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 
 class Settings
@@ -12,17 +13,7 @@ class Settings
 
     public function handle($request, Closure $next)
     {
-        try {
-            DB::connection()->getPdo();
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'messages' => (config('app.APP_DEBUG')) ? $e->getMessage() : trans('apps.msg_db_connection_not_res'),
-                'results' => null
-            ], $e->getCode());
-        }
 
-        // set database connection
         config()->set('database.default', $this->connection);
 
         // set default language with id

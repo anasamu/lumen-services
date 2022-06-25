@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Traits\Sandbox;
 use finfo;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Response;
@@ -56,7 +57,7 @@ Trait QueryController
             }
 
             // buat variabel untuk batas data yang akan ditampilkan
-            $offset = (request()->input('limit') !== null && is_integer(request()->input('limit')) ? request()->input('limit') : config('app.APP_PAGINATION_LIMIT'));
+            $offset = (request()->input('limit')) ? request()->input('limit') : config('app.APP_PAGINATION_LIMIT');
 
             // cek jika order type yang dikirim "asc" atau "desc"
             if(!in_array($order_type,$this->order_type)){
@@ -73,7 +74,7 @@ Trait QueryController
             else
             {
                 // tampilkan data berdasarkan limit dan urutkan sesuai dengan request order
-                $response = $this->model->orderBy($order, $order_type)->cursorPaginate($offset);
+                $response = $this->model->orderBy($order, $order_type)->Paginate($offset);
             }
 
             // cek jika response berhasil
@@ -128,7 +129,7 @@ Trait QueryController
                         if(array_key_exists($items, request()->all())){
                             if(request()->input('query_statement'))
                             {
-                                $q->where($items, request()->input('query_statement') ,request()->input($items));
+                                $q->where($items, request()->input('query_statement') , request()->input($items));
                             }
                             else
                             {
@@ -191,7 +192,7 @@ Trait QueryController
             else
             {
                 // cek jika hasil pencarian ingin ditampilkan semua data
-                $offset = (request()->input('limit') !== null && is_integer(request()->input('limit')) ? request()->input('limit') : config('app.APP_PAGINATION_LIMIT'));
+                $offset = (request()->input('limit')) ? request()->input('limit') : config('app.APP_PAGINATION_LIMIT');
                 if($offset == 0)
                 {
                     // menampilkan semua data
@@ -200,7 +201,7 @@ Trait QueryController
                 else
                 {
                     // menampilkan data berdasarkan per page
-                    $response = $result->cursorPaginate($offset);
+                    $response = $result->Paginate($offset);
                 }
 
                 // cek jika hasil pencarian akan ditampilkan menurut group
@@ -223,71 +224,6 @@ Trait QueryController
         }
     }
 
-    public function authentication(){
-        if($this->auth_request['auth_request'] !== true){
-            abort(404);
-        }
-
-        $request = request()->all();
-        if(!array_key_exists($this->auth_request['auth_key_name'], $request) AND !array_key_exists($this->auth_request['auth_key_hash'], $request)){
-            abort(404);
-        }
-
-        try {
-            $result = $this->model->where(function($q){
-                // cek auth key name
-                $q->where($this->auth_request['auth_key_name'], request()->input($this->auth_request['auth_key_name']));
-            })->firstOrFail()->toArray();
-
-            $request_auth = request()->input($this->auth_request['auth_key_hash']);
-            $response_hash = $result[$this->auth_request['auth_key_hash']];
-            if(password_verify($request_auth,$response_hash))
-            {
-                $response = [
-                    'authentication' => true,
-                    'data' => $result
-                ];
-
-                unset($response['data'][$this->auth_request['auth_key_hash']]);
-                return $this->res($response, Response::HTTP_FOUND, trans('apps.msg_auth_success'));
-            }
-
-            return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_auth_failed'));
-        }
-        catch (QueryException $e) {
-            return $this->res(null,Response::HTTP_BAD_REQUEST, $e->errorInfo[2]);
-        }
-    }
-
-    public function upload($name = null){
-
-        if($name == null){
-            abort(404);
-        }
-
-        if($this->upload_request['upload_request'] != true){
-            abort(404);
-        }
-
-        $file_name = $this->upload_request['upload_dir'].'/'.$name;
-        $storage = Storage::disk(config('app.FILESYSTEM_DISK','local'));
-        if($storage->exists($file_name)){
-            if($storage->exists($file_name)){
-                $url = config('app.AWS_URL') . $file_name;
-                if(config('app.FILESYSTEM_DISK','local') == "local"){
-                    $url = storage_path('app/'. $file_name);
-                }
-
-                $getfile    = file_get_contents($url);
-                $file_info  = new finfo(FILEINFO_MIME_TYPE);
-                $mime_type  = $file_info->buffer($getfile);
-                return response($getfile, 200)->header('Content-type', $mime_type);
-            }
-        }
-
-        abort(404);
-    }
-
     public function store(){
         try {
             $columns    = Schema::getColumnListing($this->model->getTable());
@@ -304,48 +240,6 @@ Trait QueryController
                     if($key == $this->auth_request['auth_key_hash']){
                         $request[$key] = password_hash($val, PASSWORD_DEFAULT);
                     }
-                }
-            }
-
-            // cek jika upload request diaktifkan
-            if($this->upload_request['upload_request'] == true){
-                // cek jika request menggunakan multipart
-                if(request()->hasFile($this->upload_request['upload_name'])){
-                    $files = request()->file($this->upload_request['upload_name']);
-                    $random_name = $files->hashName();
-
-                    // cek ekstensi yang diupload
-                    if(!in_array($files->getClientOriginalExtension(),$this->upload_request['extension'])){
-                        abort(415,trans('apps.msg_upload_ext_not_support'));
-                    }
-
-                    // convert byte to kb
-                    $size = number_format($files->getSize() / 1024, 0);
-                    // jika max upload 0 maka unlimited size upload
-                    if($this->upload_request['max_upload'] > 0){
-                        if($size > $this->upload_request['max_upload']){
-                            abort(413,trans('apps.msg_upload_large'));
-                        }
-                    }
-
-                    // tambahkan name upload pada request
-                    $request[$this->upload_request['upload_name']] = $random_name;
-                    // tambahkan metadata pada request
-                    $request['file_original_name']  = $files->getClientOriginalName();
-                    $request['file_extension']      = $files->getClientOriginalExtension();
-                    $request['file_mime_type']      = $files->getMimeType();
-                    $request['file_size']           = $files->getSize();
-
-                    // proses upload file
-                    $storage = Storage::disk(config('app.FILESYSTEM_DISK','local'));
-                    $request['url_s3'] = null;
-                    if(config('app.FILESYSTEM_DISK','local') == 's3'){
-                        $request['url_s3'] = config('app.AWS_URL') . '/' . $random_name;
-                    }
-
-                    $request['sub_directory'] = null;
-                    $upload_files = '/' . $this->upload_request['upload_dir'] . '/' . $random_name;
-                    $storage->put($upload_files, file_get_contents($files), 'public');
                 }
             }
 
@@ -391,74 +285,6 @@ Trait QueryController
                 }
             }
 
-            // upload options
-            // cek jika request ada perubahan pada file upload
-            // cek jika upload request diaktifkan
-            if($this->upload_request['upload_request'] == true){
-                if(array_key_exists($this->upload_request['upload_name'], $request)){
-                    // cek jika upload request diaktifkan
-                    if($this->upload_request['upload_request'] == true){
-                        // cek jika request menggunakan multipart
-                        if(request()->hasFile($this->upload_request['upload_name'])){
-                            $temp = $results->toArray();
-                            $name = $temp[$this->upload_request['upload_name']];
-                            $upload_files = '/' . $this->upload_request['upload_dir'] . '/' . $name;
-                            $storage = Storage::disk(config('app.FILESYSTEM_DISK','local'));
-                            if($storage->exists($upload_files)){
-                                $storage->delete($upload_files);
-                            }
-
-                            $files = request()->file($this->upload_request['upload_name']);
-                            $random_name = $files->hashName();
-                            // cek ekstensi yang diupload
-                            if(!in_array($files->getClientOriginalExtension(),$this->upload_request['extension'])){
-                                abort(415,trans('apps.msg_upload_ext_not_support'));
-                            }
-
-                            // convert byte to kb
-                            $size = number_format($files->getSize() / 1024, 0);
-                            // jika max upload 0 maka unlimited size upload
-                            if($this->upload_request['max_upload'] > 0){
-                                if($size > $this->upload_request['max_upload']){
-                                    abort(413,trans('apps.msg_upload_large'));
-                                }
-                            }
-
-                            // tambahkan name upload pada request
-                            $request[$this->upload_request['upload_name']] = $random_name;
-                            // tambahkan metadata pada request
-                            $request['file_original_name']  = $files->getClientOriginalName();
-                            $request['file_extension']      = $files->getClientOriginalExtension();
-                            $request['file_mime_type']      = $files->getMimeType();
-                            $request['file_size']           = $files->getSize();
-
-                            // proses upload
-                            $storage = Storage::disk(config('app.FILESYSTEM_DISK','local'));
-                            $request['url_s3'] = null;
-                            if(config('app.FILESYSTEM_DISK','local') == 's3'){
-                                $request['url_s3'] = config('app.AWS_URL') . '/' . $random_name;
-                            }
-
-                            $request['sub_directory'] = null;
-                            $upload_files = '/' . $this->upload_request['upload_dir'] . '/' . $random_name;
-
-                            $storage->put($upload_files, file_get_contents($files), 'public');
-                        }
-                    }
-
-                    // convert results to array
-                    $temp = $results->toArray();
-                    $upload_files = null; // deklarasi ulang variable
-                    // proses hapus file sebelumnya
-                    $name = $temp[$this->upload_request['upload_name']];
-                    $upload_files = '/' . $this->upload_request['upload_dir'] . '/' . $name;
-                    $storage = Storage::disk(config('app.FILESYSTEM_DISK','local'));
-                    if($storage->exists($upload_files)){
-                        $storage->delete($upload_files);
-                    }
-                }
-            }
-
             if($results->update($request)){
                 return $this->res($results, Response::HTTP_CREATED, trans('apps.msg_update_data'));
             }
@@ -474,16 +300,8 @@ Trait QueryController
             $results = $this->model->findOrFail($uuid);
             if($results->delete()){
                 if(request()->input('forced_delete') == "yes"){
-                    // proses hapus file sebelumnya
-                    $temp = $results->toArray();
-                    $name = $temp[$this->upload_request['upload_name']];
-                    $upload_files = '/' . $this->upload_request['upload_dir'] . '/' . $name;
-                    $storage = Storage::disk(config('app.FILESYSTEM_DISK','local'));
-                    if($storage->exists($upload_files)){
-                        $storage->delete($upload_files);
-                        $results->forceDelete();
-                        return $this->res($results, Response::HTTP_ACCEPTED, trans('apps.msg_delete_data_success'));
-                    }
+                    $results->forceDelete();
+                    return $this->res($results, Response::HTTP_ACCEPTED, trans('apps.msg_delete_data_success'));
                 }
 
                 return $this->res($results, Response::HTTP_OK, trans('apps.msg_move_to_trash_success'));
@@ -595,14 +413,14 @@ Trait QueryController
             else
             {
                 # check search result if need get all data or with pagination
-                $offset = (request()->input('limit') !== null && is_integer(request()->input('limit')) ? request()->input('limit') : config('app.APP_PAGINATION_LIMIT'));
+                $offset = (request()->input('limit')) ? request()->input('limit') : config('app.APP_PAGINATION_LIMIT');
                 if($offset == 0)
                 {
                     $response = $result->get();
                 }
                 else
                 {
-                    $response = $result->cursorPaginate($offset);
+                    $response = $result->Paginate($offset);
                 }
 
                 // check if using group_by request
@@ -642,24 +460,12 @@ Trait QueryController
     public function trashDelete($uuid){
         try {
             $results = $this->model->withTrashed()->findOrFail($uuid);
-            $temp = $results;
             if($results->trashed())
             {
-                if($this->upload_request['upload_request'] == true){
-                    // proses hapus file sebelumnya
-                    $temp = $results->toArray();
-                    $name = $temp[$this->upload_request['upload_name']];
-                    $upload_files = '/' . $this->upload_request['upload_dir'] . '/' . $name;
-                    $storage = Storage::disk(config('app.FILESYSTEM_DISK','local'));
-                    if($storage->exists($upload_files)){
-                        $storage->delete($upload_files);
-                        $results->forceDelete();
-                        return $this->res($results, Response::HTTP_ACCEPTED, trans('apps.msg_delete_data_success'));
-                    }
-                }
-
+                $results->forceDelete();
                 return $this->res($results, Response::HTTP_ACCEPTED, trans('apps.msg_delete_data_success'));
             }
+
             return $this->res($results, Response::HTTP_NOT_FOUND, trans('apps.msg_delete_data_failed'));
         }
         catch (QueryException $e) {

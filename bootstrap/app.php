@@ -62,7 +62,7 @@ $app->singleton(
 $app->configure('app');
 $app->configure('cors');
 $app->configure('queue');
-$app->configure('filesystems');
+
 /*
 |--------------------------------------------------------------------------
 | Register Middleware

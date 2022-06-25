@@ -2,7 +2,6 @@
 
 
 use Illuminate\Support\Str;
-
 return [
 
     /*
@@ -36,11 +35,11 @@ return [
 
         'sandbox' => [
             'driver' => 'mysql',
-            'host' => (env('DEV_DB_HOST') ? env('DEV_DB_HOST') : env('DB_HOST', '127.0.0.1')),
-            'port' => (env('DEV_DB_PORT') ? env('DEV_DB_PORT') : env('DB_PORT', 3306)),
+            'host' => (env('DEV_DB_HOST')) ? env('DEV_DB_HOST') : env('DB_HOST', '127.0.0.1'),
+            'port' => (env('DEV_DB_PORT')) ? env('DEV_DB_PORT') : env('DB_PORT', 3306),
             'database' => env('DB_DATABASE_SANDBOX', 'forge'),
-            'username' => (env('DEV_DB_USERNAME') ? env('DEV_DB_USERNAME') : env('DB_USERNAME', 'forge')),
-            'password' => (env('DEV_DB_PASSWORD') ? env('DEV_DB_PASSWORD') : env('DB_PASSWORD', '')),
+            'username' => (env('DEV_DB_USERNAME')) ? env('DEV_DB_USERNAME') : env('DB_USERNAME', 'forge'),
+            'password' => (env('DEV_DB_PASSWORD')) ? env('DEV_DB_PASSWORD') : env('DB_PASSWORD', ''),
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),

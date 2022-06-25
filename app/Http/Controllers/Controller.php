@@ -11,7 +11,7 @@ use Laravel\Lumen\Routing\Controller as BaseController;
 class Controller extends BaseController
 {
     use Sandbox;
-
+    public $order_type = ['asc','desc'];
     public $search_column = [];
     public $uuid_dependency = [];
     public $date_columns = [];
@@ -21,11 +21,6 @@ class Controller extends BaseController
         'auth_request' => false,
     ];
 
-    public $upload_request = [
-        'upload_request' => false,
-    ];
-
-    public $order_type = ['asc','desc'];
 
     public function res($results = array(), $code = 200, $msg = null){
         if($code == 200 OR $code == 302 OR $code == 201 OR $code == 202)
