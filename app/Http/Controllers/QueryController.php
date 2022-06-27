@@ -2,32 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Traits\Sandbox;
-use finfo;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Storage;
-
-/*
-    Berikut ini beberapa parameter request input value yang dapat digunakan secara default
-    anda dapat menggunakan request ini pada function index dan function search atau function delete.
-
-    - order_by         => digunakan untuk order data yang akan ditampilkan pastikan request menurut column yang ada pada table. secara default order_by menurut column created_at
-    - order_type       => digunakan untuk sorting data. parameter yang dimasukan hanya "asc" atau "desc" selain itu akan digunakan value yang diguanakan "desc" secara default
-    - limit            => digunakan untuk membatasi jumlah data yang akan ditampilkan. parameter yang dikirim harus bertipe integer. jika limit yang dikirmkan 0 maka akan menampilkan semua data yang ada pada table.
-    - query            => digunakan untuk mencari data.
-    - cursor           => digunakan untuk key pagination data
-    - period_by        => digunakan untuk menampilkan data berdasarkan periode tertentu. parameter yang dikirim berupa column pada table yang menggunakan tipedata date
-    - period_start     => digunakan untuk menampilkan data berdasarkan periode tertentu. parameter yang dikirim berupa format date "mm/dd/yyyy". untuk menggunakan fitur ini pastikan request "period_by" sudah diisi
-    - period_end       => digunakan untuk menampilkan data berdasarkan periode tertentu. parameter yang dikirim berupa format date "mm/dd/yyyy". untuk menggunakan fitur ini pastikan request "period_by" sudah diisi
-    - count_all        => digunakan untuk menampilkan jumlah data yang ada pada table.
-    - count_data       => digunakan untuk menampilkan jumlah data min, max, avg pada table. pastikan request untuk "count_data_by_all" sudah diisi.
-    - count_data_by    => digunakan untuk menampilkan jumlah data berdasarkan column yang hanya berisi value integer atau decimal.
-    - group_by         => digunakan untuk menampilkan data berdasarkan group. pastikan parameter yang dikirim ada pada column table.
-    - forced_delete    => digunakan untuk menghapus paksa dan melewati soft delete pada function delete. value parameter ini harus diisi "yes"
-*/
 
 Trait QueryController
 {
@@ -75,6 +53,11 @@ Trait QueryController
             {
                 // tampilkan data berdasarkan limit dan urutkan sesuai dengan request order
                 $response = $this->model->orderBy($order, $order_type)->Paginate($offset);
+                if(request()->input('_relatedColumns')){
+                    if(request()->input('_relatedColumns')){
+                        $response = $this->services_dependency($response, request()->input('_relatedColumns'));
+                    }
+                }
             }
 
             // cek jika response berhasil
@@ -265,11 +248,10 @@ Trait QueryController
                 {
                     // menampilkan data berdasarkan per page
                     $response = $result->Paginate($offset);
-                }
-
-                if(request()->input('_relatedColumns')){
                     if(request()->input('_relatedColumns')){
-                        $response = $this->services_dependency($response, request()->input('_relatedColumns'));
+                        if(request()->input('_relatedColumns')){
+                            $response = $this->services_dependency($response, request()->input('_relatedColumns'));
+                        }
                     }
                 }
 
@@ -324,8 +306,11 @@ Trait QueryController
         try {
             $results = $this->model->findOrFail($uuid);
             if($results){
-                $response = $this->services_dependency($results);
-                return $this->res($response, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
+                if(request()->input('_relatedColumns')){
+                    $results = $this->services_dependency($results, request()->input('_relatedColumns'));
+                }
+
+                return $this->res($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
             }
             return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
         }
@@ -334,7 +319,6 @@ Trait QueryController
         }
     }
 
-    // custom read without uuid
     public function details(){
         try {
             $results = false;
@@ -351,8 +335,13 @@ Trait QueryController
             }
 
             if($results){
+                if(request()->input('_relatedColumns')){
+                    $results = $this->services_dependency($results, request()->input('_relatedColumns'));
+                }
+
                 return $this->res($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
             }
+
             return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
         }
         catch (QueryException $e) {
@@ -409,7 +398,6 @@ Trait QueryController
         }
     }
 
-    // Trash function for soft deleted
     public function trash()
     {
         try {
@@ -578,6 +566,54 @@ Trait QueryController
 
             // if using show response data
             if($services_json !== null){
+                if(!isset($res['data'])){
+                    foreach($related as $r_srv){
+                        foreach($r_srv as $srvDetails => $srvColumns){
+                            // setup services dependency
+                            $services_name_dependency   = explode('@',$srvDetails)[0];
+                            $services_scope_dependency  = explode('@',$srvDetails)[1];
+                            for ($i=0; $i <= count($srvColumns) ; $i++) {
+
+                                if(!isset($srvColumns[$i]['foreign_key'])){
+                                    return $res;
+                                }
+
+                                if(!isset($srvColumns[$i]['primary_key'])){
+                                    return $res;
+                                }
+
+                                // connect to other services
+                                if(array_key_exists($services_name_dependency,$services_json)){
+                                    $services            = $services_json[$services_name_dependency];
+                                    $services_host       = rtrim($services['host'], '/\\');
+                                    $services_secret_key = $services['secret_key'];
+                                    $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/';
+                                    $foreign_key         = $srvColumns[$i]['foreign_key'];
+                                    $foreign_value       = $res[$foreign_key];
+                                    $requestServices     = [
+                                        'primary_key' => $srvColumns[$i]['primary_key'],
+                                        'value' => $foreign_value
+                                    ];
+
+                                    $services_response   = $this->get_services($services_url, $services_secret_key, $requestServices);
+                                    if($services_response !== null){
+                                        if(isset($srvColumns[$i]['alias'])){
+                                            unset($res[$foreign_key]);
+                                            $res[$srvColumns[$i]['alias']] = $services_response;
+                                        }
+                                        else
+                                        {
+                                            $res[$foreign_key] = $services_response;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    return $res;
+                }
+
                 $nums = 0;
                 foreach($res['data'] as $items){
                     foreach($related as $r_srv){
@@ -626,6 +662,8 @@ Trait QueryController
 
                     $nums++;
                 }
+
+                return $res;
             }
         }
 
