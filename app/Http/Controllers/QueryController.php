@@ -113,27 +113,90 @@ Trait QueryController
             }
 
             // fitur pencarian pada table
-            $result = $this->model->where(function($q){
+            $result = $this->model->where(function($q) use($columns){
 
-                // digunakan untuk mencari kata kunci sesuai parameter query yang dimasukkan.
                 if(request()->input("query") !== null){
+                    // digunakan untuk mencari kata kunci sesuai parameter query yang dimasukkan.
                     foreach($this->search_column as $items){
                         $q->orWhere($items, 'LIKE', '%' . request()->input("query") . '%');
                     }
                 }
                 else
                 {
-                    // cek jika parameter input menggunakan column name
-                    $columns = Schema::getColumnListing($this->model->getTable());
                     foreach($columns as $items){
                         if(array_key_exists($items, request()->all())){
-                            if(request()->input('query_statement'))
-                            {
-                                $q->where($items, request()->input('query_statement') , request()->input($items));
-                            }
-                            else
-                            {
-                                $q->where($items, request()->input($items));
+                            $q->where($items, request()->input($items));
+                        }
+                    }
+                }
+
+                // custom advanced search
+                if(request()->input('_customSearch') !== null){
+                    $customSearch = request()->input('_customSearch');
+                    if(is_array($customSearch)){
+                        foreach($customSearch as $items => $val1){
+                            if(in_array($items, $columns)){
+                                if(is_array($val1)){
+                                    foreach($val1 as $arr => $val2){
+                                        if(is_array($val2)){
+
+                                            if($arr == 'whereClause'){
+                                                foreach($val2 as $i => $v){
+                                                    $q->where($items, $i, $v);
+                                                }
+                                            }
+
+                                            if($arr == 'whereIn'){
+                                                $q->whereIn($items, $val2);
+                                            }
+                                            elseif($arr == 'whereNotIn'){
+                                                $q->whereNotIn($items, $val2);
+                                            }
+
+                                            if($arr == 'orWhereIn'){
+                                                $q->orWhereIn($items, $val2);
+                                            }
+                                            elseif($arr == 'orWhereNotIn'){
+                                                $q->orWhereNotIn($items, $val2);
+                                            }
+
+                                            if($arr == 'whereBetween'){
+                                                $q->whereBetween($items, $val2);
+                                            }
+                                            elseif($arr == 'whereNotBetween'){
+                                                $q->whereNotBetween($items, $val2);
+                                            }
+
+                                            if($arr == 'orWhereBetween'){
+                                                $q->orWhereBetween($items, $val2);
+                                            }
+                                            elseif($arr == 'orWhereNotBetween'){
+                                                $q->orWhereNotBetween($items, $val2);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            if(in_array($items, $this->date_columns)){
+                                                if($arr == 'whereDate'){
+                                                    $q->whereDate($items, $val2);
+                                                }
+                                                elseif($arr == 'whereMonth'){
+                                                    $q->whereMonth($items, $val2);
+                                                }
+                                                elseif($arr == 'whereDay'){
+                                                    $q->whereDay($items, $val2);
+                                                }
+                                                elseif($arr == 'whereYear'){
+                                                    $q->whereYear($items, $val2);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    $q->where($items, $val1);
+                                }
                             }
                         }
                     }
@@ -204,6 +267,12 @@ Trait QueryController
                     $response = $result->Paginate($offset);
                 }
 
+                if(request()->input('_relatedColumns')){
+                    if(request()->input('_relatedColumns')){
+                        $response = $this->services_dependency($response, request()->input('_relatedColumns'));
+                    }
+                }
+
                 // cek jika hasil pencarian akan ditampilkan menurut group
                 if(request()->input('group_by') !== null){
                     if(in_array(request()->input('group_by'), $columns)){
@@ -257,6 +326,32 @@ Trait QueryController
             if($results){
                 $response = $this->services_dependency($results);
                 return $this->res($response, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
+            }
+            return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+        }
+        catch (QueryException $e) {
+            return $this->res(null,Response::HTTP_BAD_REQUEST, $e->errorInfo[2]);
+        }
+    }
+
+    // custom read without uuid
+    public function details(){
+        try {
+            $results = false;
+            $request = request()->input('details');
+            if(is_array($request)){
+                if(isset($request['columns_key'])){
+                    if(isset($request['columns_value'])){
+                        $columns = Schema::getColumnListing($this->model->getTable());
+                        if(in_array($request['columns_key'], $columns)){
+                            $results = $this->model->where($request['columns_key'], '=', $request['columns_value'])->first();
+                        }
+                    }
+                }
+            }
+
+            if($results){
+                return $this->res($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
             }
             return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
         }
@@ -473,40 +568,63 @@ Trait QueryController
         }
     }
 
-    protected function services_dependency($response){
+    protected function services_dependency($response, $related){
         $res = $response->toArray();
         // cek jika pencarian menggunakan uuid_dependecy
         $services_json = null;
         if(file_exists(base_path('services.json'))){
-            $services_files = file_get_contents(base_path('services.json'));
+            $services_files = @file_get_contents(base_path('services.json'));
             $services_json = json_decode($services_files,true);
 
             // if using show response data
             if($services_json !== null){
-                foreach($this->uuid_dependency as $item_uuid => $val){
-                    // setup services dependency
-                    $uuid                       = $res[$item_uuid];
-                    $services_name_dependency   = explode('@',$val)[0];
-                    $services_scope_dependency  = explode('@',$val)[1];
+                $nums = 0;
+                foreach($res['data'] as $items){
+                    foreach($related as $r_srv){
+                        foreach($r_srv as $srvDetails => $srvColumns){
+                            // setup services dependency
+                            $services_name_dependency   = explode('@',$srvDetails)[0];
+                            $services_scope_dependency  = explode('@',$srvDetails)[1];
+                            for ($i=0; $i <= count($srvColumns) ; $i++) {
 
-                    // connect to other services
-                    if(array_key_exists($services_name_dependency,$services_json)){
-                        $services            = $services_json[$services_name_dependency];
-                        $services_host       = rtrim($services['host'], '/\\');
-                        $services_secret_key = $services['secret_key'];
-                        $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/' . $uuid;
-                        $services_response   = $this->get_services($services_url, $services_secret_key);
+                                if(!isset($srvColumns[$i]['foreign_key'])){
+                                    return $res;
+                                }
 
-                        if($services_response !== null){
-                            if($item_uuid == 'created_by' OR $item_uuid == 'updated_by'){
-                                $res[$item_uuid] = $services_response;
-                            }
-                            else{
-                                $add_services_scope_list = $services_scope_dependency;
-                                $res[$add_services_scope_list] = $services_response;
+                                if(!isset($srvColumns[$i]['primary_key'])){
+                                    return $res;
+                                }
+
+                                // connect to other services
+                                if(array_key_exists($services_name_dependency,$services_json)){
+                                    $services            = $services_json[$services_name_dependency];
+                                    $services_host       = rtrim($services['host'], '/\\');
+                                    $services_secret_key = $services['secret_key'];
+                                    $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/';
+                                    $foreign_key         = $srvColumns[$i]['foreign_key'];
+                                    $foreign_value       = $items[$foreign_key];
+                                    $requestServices     = [
+                                        'primary_key' => $srvColumns[$i]['primary_key'],
+                                        'value' => $foreign_value
+                                    ];
+
+                                    $services_response   = $this->get_services($services_url, $services_secret_key, $requestServices);
+                                    if($services_response !== null){
+                                        if(isset($srvColumns[$i]['alias'])){
+                                            unset($res['data'][$nums][$foreign_key]);
+                                            $res['data'][$nums][$srvColumns[$i]['alias']] = $services_response;
+                                        }
+                                        else
+                                        {
+                                            $res['data'][$nums][$foreign_key] = $services_response;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
+
+                    $nums++;
                 }
             }
         }
@@ -515,13 +633,13 @@ Trait QueryController
         return $res;
     }
 
-    protected function get_services($url, $secret_key){
+    protected function get_services($url, $secret_key, $request = null){
         try {
             $mode   = request()->header('x-sandbox-mode');
             $res = Http::withHeaders([
                 'x-services-secret-key' => $secret_key,
                 'x-sandbox-mode' => $mode
-            ])->put($url);
+            ])->put($url, $request);
             $body = json_decode($res->body());
             return $body->results;
 
@@ -530,9 +648,16 @@ Trait QueryController
         }
     }
 
-    public function ServicesConsume($uuid){
+    public function ServicesConsume(){
         try {
-            $results = $this->model->select($this->services_consume)->findOrFail($uuid);
+            $results = false;
+            $columns = Schema::getColumnListing($this->model->getTable());
+            if(in_array(request()->input('primary_key'), $columns)){
+                $results = $this->model->select(request()->input('primary_key'))->select($this->services_consume)->where(function($q){
+                    $q->where(request()->input('primary_key'),'=',request()->input('value'));
+                })->first();
+            }
+
             if($results){
                 return $this->res($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
             }

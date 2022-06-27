@@ -11,6 +11,7 @@ if(!function_exists('Resource')) {
                     $router->get('/', ['uses' => $controller . '@index']);
                     $router->get('/search', ['uses' => $controller . '@search']);
                     $router->get('/read/{uuid}', ['uses' => $controller . '@show']);
+                    $router->get('/details', ['uses' => $controller . '@details']);
                     $router->post('/create', ['uses' => $controller . '@store']);
                     $router->put('/update/{uuid}', ['uses' => $controller . '@update']);
                     $router->post('/update/{uuid}', ['uses' => $controller . '@update']);
@@ -23,7 +24,7 @@ if(!function_exists('Resource')) {
                     $router->get('/upload/{name}', ['uses' => $controller . '@upload']);
 
                     // services consume
-                    $router->put('/ServicesConsume/{uuid}', ['uses' => $controller . '@ServicesConsume']);
+                    $router->put('/ServicesConsume', ['uses' => $controller . '@ServicesConsume']);
 
                     $router->group(['prefix' => 'trash'], function () use ($controller, $router) {
                         $router->get('/', ['uses' => $controller . '@trash']);
