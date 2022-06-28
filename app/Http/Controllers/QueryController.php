@@ -2,15 +2,29 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Database\QueryException;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 
 Trait QueryController
 {
+    use ServicesResponse;
+
     public function __construct($model){
         $this->model = $model;
+    }
+
+    public function info(){
+        try {
+            $columns = Schema::getColumnListing($this->model->getTable());
+            $results = [
+                'columns' => $columns
+            ];
+            return $this->response($results,200, 'Info Scope');
+        }
+        catch (\Throwable $e) {
+            return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
+        }
     }
 
     public function index(){
@@ -63,15 +77,15 @@ Trait QueryController
             // cek jika response berhasil
             if($response){
                 // menampilkan data yang direquest
-                return $this->res($response, Response::HTTP_OK, trans("apps.msg_results"));
+                return $this->response($response, Response::HTTP_OK, trans("apps.msg_results"));
             }
 
             // menampilkan respon "not found" jika data tidak ditemukan
-            return $this->res(null, 404, trans("apps.msg_null_results"));
+            return $this->response(null, 404, trans("apps.msg_null_results"));
         }
-        catch (QueryException $e) {
+        catch (\Throwable $e) {
             // menampilkan kesalahan yang tidak diketahui!
-            return $this->res(null,Response::HTTP_BAD_REQUEST, $e->errorInfo[2]);
+            return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
         }
     }
 
@@ -213,10 +227,10 @@ Trait QueryController
 
                 // mengirimkan hasil pencarian kedalam bentuk json
                 if($response){
-                    return $this->res($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
+                    return $this->response($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
                 }
 
-                return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+                return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
             }
             elseif(request()->input('count_data') == true && request()->input('count_data_by') !== null){
                 // cek jika hasil pencarian hanya ingin menampilkan data statistik min, max, avg
@@ -230,10 +244,10 @@ Trait QueryController
 
                 // mengirimkan hasil pencarian kedalam bentuk json
                 if($response){
-                    return $this->res($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
+                    return $this->response($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
                 }
 
-                return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+                return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
             }
             else
             {
@@ -265,13 +279,13 @@ Trait QueryController
 
             // mengirimkan hasil pencarian kedalam bentuk json
             if($response){
-                return $this->res($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
+                return $this->response($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
             }
 
-            return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+            return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
         }
-        catch (QueryException $e) {
-            return $this->res(null,Response::HTTP_BAD_REQUEST, $e->errorInfo[2]);
+        catch (\Throwable $e) {
+            return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
         }
     }
 
@@ -295,10 +309,10 @@ Trait QueryController
             }
 
             $results = $this->model->create($request);
-            return $this->res($results, Response::HTTP_CREATED, trans('apps.msg_store_data'));
+            return $this->response($results, Response::HTTP_CREATED, trans('apps.msg_store_data'));
         }
-        catch (QueryException $e) {
-            return $this->res(null,Response::HTTP_BAD_REQUEST, $e->errorInfo[2]);
+        catch (\Throwable $e) {
+            return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
         }
     }
 
@@ -310,12 +324,12 @@ Trait QueryController
                     $results = $this->services_dependency($results, request()->input('_relatedColumns'));
                 }
 
-                return $this->res($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
+                return $this->response($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
             }
-            return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+            return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
         }
-        catch (QueryException $e) {
-            return $this->res(null,Response::HTTP_BAD_REQUEST, $e->errorInfo[2]);
+        catch (\Throwable $e) {
+            return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
         }
     }
 
@@ -339,13 +353,13 @@ Trait QueryController
                     $results = $this->services_dependency($results, request()->input('_relatedColumns'));
                 }
 
-                return $this->res($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
+                return $this->response($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
             }
 
-            return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+            return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
         }
-        catch (QueryException $e) {
-            return $this->res(null,Response::HTTP_BAD_REQUEST, $e->errorInfo[2]);
+        catch (\Throwable $e) {
+            return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
         }
     }
 
@@ -370,12 +384,12 @@ Trait QueryController
             }
 
             if($results->update($request)){
-                return $this->res($results, Response::HTTP_CREATED, trans('apps.msg_update_data'));
+                return $this->response($results, Response::HTTP_CREATED, trans('apps.msg_update_data'));
             }
-            return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_update_data_failed'));
+            return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_update_data_failed'));
         }
-        catch (QueryException $e) {
-            return $this->res(null,Response::HTTP_BAD_REQUEST, $e->errorInfo[2]);
+        catch (\Throwable $e) {
+            return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
         }
     }
 
@@ -385,16 +399,16 @@ Trait QueryController
             if($results->delete()){
                 if(request()->input('forced_delete') == "yes"){
                     $results->forceDelete();
-                    return $this->res($results, Response::HTTP_ACCEPTED, trans('apps.msg_delete_data_success'));
+                    return $this->response($results, Response::HTTP_ACCEPTED, trans('apps.msg_delete_data_success'));
                 }
 
-                return $this->res($results, Response::HTTP_OK, trans('apps.msg_move_to_trash_success'));
+                return $this->response($results, Response::HTTP_OK, trans('apps.msg_move_to_trash_success'));
             }
 
-            return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_move_to_trash_failed'));
+            return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_move_to_trash_failed'));
         }
-        catch (QueryException $e) {
-            return $this->res(null,Response::HTTP_BAD_REQUEST, $e->errorInfo[2]);
+        catch (\Throwable $e) {
+            return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
         }
     }
 
@@ -471,10 +485,10 @@ Trait QueryController
 
                 // mengirimkan hasil pencarian kedalam bentuk json
                 if($response){
-                    return $this->res($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
+                    return $this->response($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
                 }
 
-                return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+                return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
             }
             elseif(request()->input('count_data') == true && request()->input('count_data_by') !== null){
                 // cek jika hasil pencarian hanya ingin menampilkan data statistik min, max, avg
@@ -488,10 +502,10 @@ Trait QueryController
 
                 // mengirimkan hasil pencarian kedalam bentuk json
                 if($response){
-                    return $this->res($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
+                    return $this->response($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
                 }
 
-                return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+                return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
             }
             else
             {
@@ -515,13 +529,13 @@ Trait QueryController
             }
 
             if($response){
-                return $this->res($response, Response::HTTP_OK, trans('apps.msg_results'));
+                return $this->response($response, Response::HTTP_OK, trans('apps.msg_results'));
             }
-            return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_null_results'));
+            return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_null_results'));
 
         }
-        catch (QueryException $e) {
-            return $this->res(null,Response::HTTP_BAD_REQUEST, $e->errorInfo[2]);
+        catch (\Throwable $e) {
+            return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
         }
     }
 
@@ -531,12 +545,12 @@ Trait QueryController
             if($results->trashed())
             {
                 $results->restore();
-                return $this->res($results, Response::HTTP_CREATED, trans('apps.msg_restore_trash_success'));
+                return $this->response($results, Response::HTTP_CREATED, trans('apps.msg_restore_trash_success'));
             }
-            return $this->res($results, Response::HTTP_NOT_FOUND, trans('apps.msg_restore_trash_failed'));
+            return $this->response($results, Response::HTTP_NOT_FOUND, trans('apps.msg_restore_trash_failed'));
         }
-        catch (QueryException $e) {
-            return $this->res(null,Response::HTTP_BAD_REQUEST, $e->errorInfo[2]);
+        catch (\Throwable $e) {
+            return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
         }
     }
 
@@ -546,13 +560,13 @@ Trait QueryController
             if($results->trashed())
             {
                 $results->forceDelete();
-                return $this->res($results, Response::HTTP_ACCEPTED, trans('apps.msg_delete_data_success'));
+                return $this->response($results, Response::HTTP_ACCEPTED, trans('apps.msg_delete_data_success'));
             }
 
-            return $this->res($results, Response::HTTP_NOT_FOUND, trans('apps.msg_delete_data_failed'));
+            return $this->response($results, Response::HTTP_NOT_FOUND, trans('apps.msg_delete_data_failed'));
         }
-        catch (QueryException $e) {
-            return $this->res(null,Response::HTTP_BAD_REQUEST, $e->errorInfo[2]);
+        catch (\Throwable $e) {
+            return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
         }
     }
 
@@ -697,12 +711,12 @@ Trait QueryController
             }
 
             if($results){
-                return $this->res($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
+                return $this->response($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
             }
-            return $this->res(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+            return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
         }
-        catch (QueryException $e) {
-            return $this->res(null,Response::HTTP_BAD_REQUEST, $e->errorInfo[2]);
+        catch (\Throwable $e) {
+            return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
         }
     }
 }
