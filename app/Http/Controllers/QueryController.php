@@ -63,7 +63,7 @@ Trait QueryController
                 return $this->response($response, Response::HTTP_OK, trans("apps.msg_results"));
             }
 
-            return $this->response(null, 404, trans("apps.msg_null_results"));
+            return $this->error_response(trans('apps.msg_null_results'), Response::HTTP_NOT_FOUND);
         }
         catch (\Throwable $e) {
             // menampilkan kesalahan yang tidak diketahui!
@@ -93,7 +93,7 @@ Trait QueryController
 
             // fitur pencarian pada table
             $result = $this->selectColumns()->where(function($q){
-                $this->searchColumns($q);
+                return $this->searchColumns($q);
             })->orderBy($order, $order_type);
 
             // cek jika hasil pencarian hanya ingin menampilkan total dari hasil pencarian
@@ -133,8 +133,7 @@ Trait QueryController
             if($response){
                 return $this->response($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
             }
-
-            return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+            return $this->error_response(trans('apps.msg_search_not_found'), Response::HTTP_NOT_FOUND);
         }
         catch (\Throwable $e) {
             return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
@@ -175,10 +174,8 @@ Trait QueryController
                 if(request()->input('_relatedColumns')){
                     $results = $this->services_dependency($results, request()->input('_relatedColumns'));
                 }
-
-                return $this->response($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
             }
-            return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+            return $this->response($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
         }
         catch (\Throwable $e) {
             return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
@@ -189,14 +186,24 @@ Trait QueryController
         try {
             $results = false;
             $request = request()->input('_details');
+            if(!request()->input('_details')){
+                return $this->error_response('request tidak valid!');
+            }
+
             if(is_array($request)){
                 if(isset($request['columns_key'])){
                     if(isset($request['columns_value'])){
                         $columns = Schema::getColumnListing($this->model->getTable());
                         if(in_array($request['columns_key'], $columns)){
-                            $results = $this->selectColumns()->where($request['columns_key'], '=', $request['columns_value'])->first();
+                            $results = $this->selectColumns()->where($request['columns_key'], $request['columns_value'])->first();
                         }
                     }
+                    else{
+                        return $this->error_response('columns_value tidak tersedia');
+                    }
+                }
+                else{
+                    return $this->error_response('columns_key tidak tersedia');
                 }
             }
 
@@ -208,10 +215,10 @@ Trait QueryController
                 return $this->response($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
             }
 
-            return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+            return $this->error_response(trans('apps.msg_search_not_found'), Response::HTTP_NOT_FOUND);
         }
         catch (\Throwable $e) {
-            return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
+            return $this->error_response($e->getMessage());
         }
     }
 
@@ -238,8 +245,7 @@ Trait QueryController
             if($results->update($request)){
                 return $this->response($results, Response::HTTP_CREATED, trans('apps.msg_update_data'));
             }
-
-            return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_update_data_failed'));
+            return $this->error_response(trans('apps.msg_update_data_failed'),Response::HTTP_NOT_FOUND);
         }
         catch (\Throwable $e) {
             return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
@@ -341,8 +347,8 @@ Trait QueryController
             if($response){
                 return $this->response($response, Response::HTTP_OK, trans('apps.msg_results'));
             }
-            return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_null_results'));
 
+            return $this->error_response(trans('apps.msg_null_results'),Response::HTTP_BAD_REQUEST);
         }
         catch (\Throwable $e) {
             return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
@@ -392,7 +398,8 @@ Trait QueryController
             if($results){
                 return $this->response($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
             }
-            return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+
+            return $this->error_response(trans('apps.msg_null_results'),Response::HTTP_NOT_FOUND);
         }
         catch (\Throwable $e) {
             return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
@@ -409,6 +416,7 @@ Trait QueryController
 
             // if using show response data
             if($services_json !== null){
+
                 if(!isset($res['data'])){
                     foreach($related as $r_srv){
                         foreach($r_srv as $srvDetails => $srvColumns){
@@ -456,57 +464,61 @@ Trait QueryController
 
                     return $res;
                 }
+                else
+                {
+                    $nums = 0;
+                    foreach($res['data'] as $items){
+                        foreach($related as $r_srv){
 
-                $nums = 0;
-                foreach($res['data'] as $items){
-                    foreach($related as $r_srv){
-                        foreach($r_srv as $srvDetails => $srvColumns){
-                            // setup services dependency
-                            $services_name_dependency   = explode('@',$srvDetails)[0];
-                            $services_scope_dependency  = explode('@',$srvDetails)[1];
-                            for ($i=0; $i <= count($srvColumns) ; $i++) {
+                            foreach($r_srv as $srvDetails => $srvColumns){
+                                // setup services dependency
+                                $services_name_dependency   = explode('@',$srvDetails)[0];
+                                $services_scope_dependency  = explode('@',$srvDetails)[1];
+                                for ($i=0; $i <= count($srvColumns) ; $i++) {
 
-                                if(!isset($srvColumns[$i]['foreign_key'])){
-                                    return $res;
-                                }
+                                    if(!isset($srvColumns[$i]['foreign_key'])){
+                                        return $res;
+                                    }
 
-                                if(!isset($srvColumns[$i]['primary_key'])){
-                                    return $res;
-                                }
+                                    if(!isset($srvColumns[$i]['primary_key'])){
+                                        return $res;
+                                    }
 
-                                // connect to other services
-                                if(array_key_exists($services_name_dependency,$services_json)){
-                                    $services            = $services_json[$services_name_dependency];
-                                    $services_host       = rtrim($services['host'], '/\\');
-                                    $services_secret_key = $services['secret_key'];
-                                    $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/';
-                                    $foreign_key         = $srvColumns[$i]['foreign_key'];
-                                    $foreign_value       = $items[$foreign_key];
-                                    $requestServices     = [
-                                        'primary_key' => $srvColumns[$i]['primary_key'],
-                                        'value' => $foreign_value
-                                    ];
+                                    // connect to other services
+                                    if(array_key_exists($services_name_dependency,$services_json)){
+                                        $services            = $services_json[$services_name_dependency];
+                                        $services_host       = rtrim($services['host'], '/\\');
+                                        $services_secret_key = $services['secret_key'];
+                                        $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/';
+                                        $foreign_key         = $srvColumns[$i]['foreign_key'];
+                                        $foreign_value       = $items[$foreign_key];
+                                        $requestServices     = [
+                                            'primary_key' => $srvColumns[$i]['primary_key'],
+                                            'value' => $foreign_value,
+                                            '_selectColumns' => $srvColumns[$i]['_selectColumns']
+                                        ];
 
-                                    $services_response   = $this->get_services($services_url, $services_secret_key, $requestServices);
-                                    if($services_response !== null){
-                                        if(isset($srvColumns[$i]['alias'])){
-                                            unset($res['data'][$nums][$foreign_key]);
-                                            $res['data'][$nums][$srvColumns[$i]['alias']] = $services_response;
-                                        }
-                                        else
-                                        {
-                                            $res['data'][$nums][$foreign_key] = $services_response;
+                                        $services_response   = $this->get_services($services_url, $services_secret_key, $requestServices);
+                                        if($services_response !== null){
+                                            if(isset($srvColumns[$i]['alias'])){
+                                                unset($res['data'][$nums][$foreign_key]);
+                                                $res['data'][$nums][$srvColumns[$i]['alias']] = $services_response;
+                                            }
+                                            else
+                                            {
+                                                $res['data'][$nums][$foreign_key] = $services_response;
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
+
+                        $nums++;
                     }
 
-                    $nums++;
+                    return $res;
                 }
-
-                return $res;
             }
         }
 
@@ -530,17 +542,18 @@ Trait QueryController
     }
 
     protected function selectColumns(){
+        $columns = Schema::getColumnListing($this->model->getTable());
         if(request()->input('_selectColumns')){
-            $columns = Schema::getColumnListing($this->model->getTable());
             if(is_array(request()->input('_selectColumns'))){
-                foreach(request()->input('_selectColumns') as $col){
-                    if(!in_array($col, $columns)){
-                        unset(request()->input('_selectColumns')[$col]);
+                $colData = [];
+                foreach(request()->input('_selectColumns') as $i => $val){
+                    if(in_array($val, $columns)){
+                        array_push($colData, $val);
                     }
                 }
 
-                if(count(request()->input('_selectColumns')) > 0){
-                    return $this->model->select(request()->input('_selectColumns'));
+                if(count($colData) > 0){
+                    return $this->model->select($colData);
                 }
             }
             else
@@ -549,38 +562,26 @@ Trait QueryController
                     return $this->model->select(request()->input('_selectColumns'));
                 }
             }
-
-            return $this->model->select($columns);
         }
+
+        return $this->model->select($columns);
     }
 
     protected function searchColumns($q){
         $columns = Schema::getColumnListing($this->model->getTable());
-        if(request()->input("query") !== null){
-            // digunakan untuk mencari kata kunci sesuai parameter query yang dimasukkan.
-            foreach($this->search_column as $items){
-                $q->orWhere($items, 'LIKE', '%' . request()->input("query") . '%');
-            }
-        }
-        else
-        {
-            foreach($columns as $items){
-                if(array_key_exists($items, request()->all())){
-                    $q->where($items, request()->input($items));
-                }
-            }
-        }
-
         // custom advanced search
-        if(request()->input('_customSearch') !== null){
+        if(request()->input('_customSearch')){
             $customSearch = request()->input('_customSearch');
             if(is_array($customSearch)){
                 foreach($customSearch as $items => $val1){
+                    // cek jika columns tersedia
                     if(in_array($items, $columns)){
+                        // cek jika nilai dari columns bertipe array
                         if(is_array($val1)){
-                            foreach($val1 as $arr => $val2){
-                                if(is_array($val2)){
 
+                            foreach($val1 as $arr => $val2){
+                                // cek jika value dari value pertama bertipe array
+                                if(is_array($val2)){
                                     if($arr == 'whereClause'){
                                         foreach($val2 as $i => $v){
                                             $q->where($items, $i, $v);
@@ -639,6 +640,15 @@ Trait QueryController
                             $q->where($items, $val1);
                         }
                     }
+                }
+            }
+        }
+        else
+        {
+            if(request()->input("query")){
+                // digunakan untuk mencari kata kunci sesuai parameter query yang dimasukkan.
+                foreach($this->search_column as $items){
+                    $q->orWhere($items, 'LIKE', '%' . request()->input("query") . '%');
                 }
             }
         }
