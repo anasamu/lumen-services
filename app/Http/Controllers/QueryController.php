@@ -293,35 +293,8 @@ Trait QueryController
                 $this->searchColumns($q);
             })->orderBy($order, $order_type);
 
-            if(request()->input('count_all') == true){
-                // count all rows
-                $response = [
-                    'count_all' => $result->count(),
-                ];
-
-                // mengirimkan hasil pencarian kedalam bentuk json
-                if($response){
-                    return $this->response($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
-                }
-
-                return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
-            }
-            elseif(request()->input('count_data') == true && request()->input('count_data_by') !== null){
-                // cek jika hasil pencarian hanya ingin menampilkan data statistik min, max, avg
-                if(in_array(request()->input('count_data_by'), $this->number_columns)){
-                    $response = [
-                        'count_min' => $result->min(request()->input('count_data_by')),
-                        'count_max' => $result->max(request()->input('count_data_by')),
-                        'count_avg' => number_format($result->avg(request()->input('count_data_by')), 2),
-                    ];
-                }
-
-                // mengirimkan hasil pencarian kedalam bentuk json
-                if($response){
-                    return $this->response($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
-                }
-
-                return $this->response(null, Response::HTTP_NOT_FOUND, trans('apps.msg_search_not_found'));
+            if(request()->input('_countResults')){
+                return $this->countResults($result);
             }
             else
             {
@@ -334,6 +307,9 @@ Trait QueryController
                 else
                 {
                     $response = $result->Paginate($offset);
+                    if(request()->input('_relatedColumns')){
+                        $response = $this->services_dependency($response, request()->input('_relatedColumns'));
+                    }
                 }
 
                 // check if using group_by request
