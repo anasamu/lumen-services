@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Console\Commands\SandboxClear;
 use App\Console\Commands\SandboxCopy;
-use App\Services\ServicesResponse;
+use App\Traits\ServicesResponse;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Lumen\Routing\Controller as BaseController;
 

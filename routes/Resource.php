@@ -9,6 +9,7 @@ if(!function_exists('Resource')) {
                 // using prefix url with services version
                 $app->router->group(['prefix' => $key], function ($router) use ($controller) {
                     $router->get('/', ['uses' => $controller . '@index']);
+                    $router->get('/info', ['uses' => $controller . '@info']);
                     $router->get('/search', ['uses' => $controller . '@search']);
                     $router->get('/read/{uuid}', ['uses' => $controller . '@show']);
                     $router->get('/details', ['uses' => $controller . '@details']);

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Traits;
 
 use App\Traits\Sandbox;
 use Illuminate\Auth\AuthenticationException;
@@ -18,9 +18,8 @@ trait ServicesResponse {
     public function response($body, $code = 200, $msg = null){
         if($code >= 200 AND $code <= 302)
         {
-            $data = $body;
+            $data = (object) $body;
             if(isset($data->data)){
-
                 $first_page_url = null;
                 if(isset($data->first_page_url)){
                     $first_page_url = parse_url($data->first_page_url);
