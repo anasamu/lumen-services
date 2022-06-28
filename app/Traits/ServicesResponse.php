@@ -89,7 +89,7 @@ trait ServicesResponse {
         }
         else
         {
-            return $this->error_response($body->messages);
+            return $this->error_response($msg);
         }
     }
 
