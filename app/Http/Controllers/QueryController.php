@@ -545,6 +545,23 @@ Trait QueryController
 
     protected function searchColumns($q){
         $columns = Schema::getColumnListing($this->model->getTable());
+        // userdata config
+        if(request()->input('_usersDataConfig')){
+            $usersDataConfig = request()->input('_usersDataConfig');
+            foreach($usersDataConfig as $i => $v){
+                if(in_array($i, $columns)){
+                    $q->where($i, $v);
+                }
+            }
+        }
+
+        if(request()->input("query")){
+            // digunakan untuk mencari kata kunci sesuai parameter query yang dimasukkan.
+            foreach($this->search_column as $items){
+                $q->orWhere($items, 'LIKE', '%' . request()->input("query") . '%');
+            }
+        }
+
         // custom advanced search
         if(request()->input('_customSearch')){
             $customSearch = request()->input('_customSearch');
@@ -616,15 +633,6 @@ Trait QueryController
                             $q->where($items, $val1);
                         }
                     }
-                }
-            }
-        }
-        else
-        {
-            if(request()->input("query")){
-                // digunakan untuk mencari kata kunci sesuai parameter query yang dimasukkan.
-                foreach($this->search_column as $items){
-                    $q->orWhere($items, 'LIKE', '%' . request()->input("query") . '%');
                 }
             }
         }

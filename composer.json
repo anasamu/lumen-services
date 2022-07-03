@@ -42,7 +42,16 @@
         "post-root-package-install": [
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
         ],
+        "post-create-project-cmd": [
+            "@php artisan key:generate --ansi",
+            "@php artisan migrate:refresh --force --database=live",
+            "@php artisan migrate:refresh --force --database=sandbox"
+        ],
         "post-install-cmd": [
+            "php artisan migrate --force --database=live",
+            "php artisan migrate --force --database=sandbox"
+        ],
+        "post-update-cmd": [
             "php artisan migrate --force --database=live",
             "php artisan migrate --force --database=sandbox"
         ]
