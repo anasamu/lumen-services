@@ -18,60 +18,62 @@ trait ServicesResponse {
     public function response($body, $code = 200, $msg = null){
         if($code >= 200 AND $code <= 302)
         {
-            $data = (object) $body;
-            if(isset($data->data)){
-                $first_page_url = null;
-                if(isset($data->first_page_url)){
-                    $first_page_url = parse_url($data->first_page_url);
-                    parse_str($first_page_url['query'], $first_page_url);
-                    $first_page_url = (int) $first_page_url['page'];
-                }
+            if($body !== null){
+                $data = (object) $body;
+                if(isset($data->data)){
+                    $first_page_url = null;
+                    if(isset($data->first_page_url)){
+                        $first_page_url = parse_url($data->first_page_url);
+                        parse_str($first_page_url['query'], $first_page_url);
+                        $first_page_url = (int) $first_page_url['page'];
+                    }
 
-                $next_page_url = null;
-                if(isset($data->next_page_url)){
-                    $next_page_url = parse_url($data->next_page_url);
-                    parse_str($next_page_url['query'], $next_page_url);
-                    $next_page_url = (int) $next_page_url['page'];
-                }
+                    $next_page_url = null;
+                    if(isset($data->next_page_url)){
+                        $next_page_url = parse_url($data->next_page_url);
+                        parse_str($next_page_url['query'], $next_page_url);
+                        $next_page_url = (int) $next_page_url['page'];
+                    }
 
-                $prev_page_url = null;
-                if(isset($data->prev_page_url)){
-                    $prev_page_url = parse_url($data->prev_page_url);
-                    parse_str($prev_page_url['query'], $prev_page_url);
-                    $prev_page_url = (int) $prev_page_url['page'];
-                }
+                    $prev_page_url = null;
+                    if(isset($data->prev_page_url)){
+                        $prev_page_url = parse_url($data->prev_page_url);
+                        parse_str($prev_page_url['query'], $prev_page_url);
+                        $prev_page_url = (int) $prev_page_url['page'];
+                    }
 
-                $total = null;
-                if(isset($data->total)){
-                    $total = $data->total;
-                }
+                    $total = null;
+                    if(isset($data->total)){
+                        $total = $data->total;
+                    }
 
-                $current_page = null;
-                if(isset($data->current_page)){
-                    $current_page = $data->current_page;
-                }
+                    $current_page = null;
+                    if(isset($data->current_page)){
+                        $current_page = $data->current_page;
+                    }
 
-                $last_page = null;
-                if(isset($data->last_page)){
-                    $last_page = $data->last_page;
-                }
+                    $last_page = null;
+                    if(isset($data->last_page)){
+                        $last_page = $data->last_page;
+                    }
 
-                $response = (object) [
-                    'status' => TRUE,
-                    'messages' => $msg,
-                    'mode' => $this->connection,
-                    'services' => config('app.SERVICES_NAME'),
-                    'results' => [
-                        "data" => $data->data,
-                        "per_page" => $data->per_page,
-                        "current_page" => $current_page,
-                        "first_page" => $first_page_url,
-                        "last_page" => $last_page,
-                        "prev_page" => $prev_page_url,
-                        "next_page" => $next_page_url,
-                        "total" => $total
-                    ]
-                ];
+                    $response = (object) [
+                        'status' => TRUE,
+                        'messages' => $msg,
+                        'mode' => $this->connection,
+                        'services' => config('app.SERVICES_NAME'),
+                        'results' => [
+                            "data" => $data->data,
+                            "per_page" => $data->per_page,
+                            "current_page" => $current_page,
+                            "first_page" => $first_page_url,
+                            "last_page" => $last_page,
+                            "prev_page" => $prev_page_url,
+                            "next_page" => $next_page_url,
+                            "total" => $total
+                        ]
+                    ];
+                }
             }
             else
             {
@@ -80,9 +82,8 @@ trait ServicesResponse {
                     'messages' => $msg,
                     'mode' => $this->connection,
                     'services' => config('app.SERVICES_NAME'),
-                    'results' => $data
+                    'results' => null
                 ];
-
             }
 
             return response()->json($response, $code);
