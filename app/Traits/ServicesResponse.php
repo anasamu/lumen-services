@@ -18,7 +18,7 @@ trait ServicesResponse {
     public function response($body, $code = 200, $msg = null){
         if($code >= 200 AND $code <= 302)
         {
-            if($body !== null){
+            if($body){
                 $data = (object) $body;
                 if(isset($data->data)){
                     $first_page_url = null;
@@ -74,6 +74,16 @@ trait ServicesResponse {
                         ]
                     ];
                 }
+                else
+                {
+                    $response = (object) [
+                        'status' => TRUE,
+                        'messages' => $msg,
+                        'mode' => $this->connection,
+                        'services' => config('app.SERVICES_NAME'),
+                        'results' => $body
+                    ];
+                }
             }
             else
             {
@@ -94,43 +104,49 @@ trait ServicesResponse {
         }
     }
 
-    public function error_response($messages, $code = 400){
+    public function error_response($messages, $code = 400, $error = null){
         return response()->json((object) [
             'status' => FALSE,
             'messages' => $messages,
             'mode' => $this->connection,
             'services' => config('app.SERVICES_NAME'),
-            'results' => null
+            'results' => $error
         ], $code);
     }
 
     public function handleApiException($e){
-        $messages = $e->getMessage();
 
-        if($e instanceof PDOException){
-            return $this->error_response($messages, Response::HTTP_INTERNAL_SERVER_ERROR);
-        }
-
-        if($e instanceof QueryException){
-            return $this->error_response($messages, Response::HTTP_SERVICE_UNAVAILABLE);
-        }
-
-        if($e instanceof HttpResponseException){
-            return $this->error_response($messages, Response::HTTP_INTERNAL_SERVER_ERROR);
+        $messages = 'Terjadi Kesalahan! Silahkan coba lagi.';
+        $trace = null;
+        if(config('APP_DEBUG')){
+            $messages = $e->getMessage();
+            $trace = $e->getTrace();
         }
 
         if ($e instanceof HttpExceptionInterface) {
-            return $this->error_response($messages, $e->getStatusCode());
+            return $this->error_response($messages, $e->getStatusCode(), $trace);
+        }
+
+        if($e instanceof PDOException){
+            return $this->error_response($messages, Response::HTTP_INTERNAL_SERVER_ERROR, $trace);
+        }
+
+        if($e instanceof QueryException){
+            return $this->error_response($messages, Response::HTTP_SERVICE_UNAVAILABLE, $trace);
+        }
+
+        if($e instanceof HttpResponseException){
+            return $this->error_response($messages, Response::HTTP_INTERNAL_SERVER_ERROR, $trace);
         }
 
         if($e instanceof AuthenticationException){
-            return $this->error_response('Unauthorized', 401);
+            return $this->error_response('Unauthorized', 401, $trace);
         }
 
         if($e instanceof DecryptException){
-            return $this->error_response($messages, Response::HTTP_BAD_REQUEST);
+            return $this->error_response($messages, Response::HTTP_BAD_REQUEST, $trace);
         }
 
-        return $this->error_response($messages, 500);
+        return $this->error_response($messages, 500, $trace);
     }
 }

@@ -167,14 +167,9 @@ Trait QueryController
             else
             {
                 // cek jika hasil pencarian ingin ditampilkan semua data
+                $response = $result->get();
                 $offset = (request()->input('limit')) ? request()->input('limit') : config('app.APP_PAGINATION_LIMIT');
-                if($offset == 0)
-                {
-                    // menampilkan semua data
-                    $response = $result->get();
-                }
-                else
-                {
+                if($offset > 0){
                     // menampilkan data berdasarkan per page
                     $response = $result->Paginate($offset);
                     if(request()->input('_relatedColumns')){
@@ -188,7 +183,6 @@ Trait QueryController
                 if(request()->input('group_by') !== null){
                     if(in_array(request()->input('group_by'), $columns)){
                         $response = $result->get()->groupBy(request()->input('group_by'));
-
                         if(request()->input('_relatedColumns')){
                             if(request()->input('_relatedColumns')){
                                 $response = $this->services_dependency($response, request()->input('_relatedColumns'));
@@ -533,46 +527,43 @@ Trait QueryController
             if($services_json !== null){
                 if(!isset($res['data'])){
                     if(isset($res['uuid'])){
-                        foreach($related as $r_srv){
-                            foreach($r_srv as $srvDetails => $srvColumns){
-                                // setup services dependency
-                                $services_name_dependency   = explode('@',$srvDetails)[0];
-                                $services_scope_dependency  = explode('@',$srvDetails)[1];
-                                for ($i=0; $i <= count($srvColumns) ; $i++) {
+                        foreach($related as $srvDetails => $srvColumns){
+                            // setup services dependency
+                            $services_name_dependency   = explode('@',$srvDetails)[0];
+                            $services_scope_dependency  = explode('@',$srvDetails)[1];
+                            foreach($srvColumns as $_srvColumns){
+                                if(isset($_srvColumns['foreign_key'])){
+                                    if(isset($_srvColumns['primary_key'])){
+                                        // connect to other services
+                                        if(array_key_exists($services_name_dependency,$services_json)){
+                                            $services            = $services_json[$services_name_dependency];
+                                            $services_host       = rtrim($services['host'], '/\\');
+                                            $services_secret_key = $services['secret_key'];
+                                            $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/';
+                                            $foreign_key         = $_srvColumns['foreign_key'];
+                                            $foreign_value       = $res[$foreign_key];
 
-                                    if(isset($srvColumns[$i]['foreign_key'])){
-                                        if(isset($srvColumns[$i]['primary_key'])){
-                                            $type_data = 'string';
-                                            if(isset($srvColumns[$i]['type_data'])){
-                                                $type_data = $srvColumns[$i]['type_data'];
-                                            }
+                                            $requestServices = [
+                                                'primary_key' => $_srvColumns['primary_key'],
+                                                'value' => $foreign_value,
+                                                '_selectColumns' => $_srvColumns['_selectColumns']
+                                            ];
+                                            $header = [
+                                                'x-services-name' => $services_name_dependency,
+                                                'x-scope-access' => $services_scope_dependency,
+                                                'Authorization' => request()->header('Authorization')
+                                            ];
 
-                                            // connect to other services
-                                            if(array_key_exists($services_name_dependency,$services_json)){
-                                                $services            = $services_json[$services_name_dependency];
-                                                $services_host       = rtrim($services['host'], '/\\');
-                                                $services_secret_key = $services['secret_key'];
-                                                $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/';
-                                                $foreign_key         = $srvColumns[$i]['foreign_key'];
-                                                $foreign_value       = $res[$foreign_key];
+                                            $services_response = $this->get_services($services_url, $services_secret_key, $requestServices, $header);
 
-                                                settype($foreign_value, $type_data);
-
-                                                $requestServices     = [
-                                                    'primary_key' => $srvColumns[$i]['primary_key'],
-                                                    'value' => $foreign_value
-                                                ];
-
-                                                $services_response = $this->get_services($services_url, $services_secret_key, $requestServices);
-                                                if($services_response !== null){
-                                                    if(isset($srvColumns[$i]['alias'])){
-                                                        unset($res[$foreign_key]);
-                                                        $res[$srvColumns[$i]['alias']] = $services_response;
-                                                    }
-                                                    else
-                                                    {
-                                                        $res[$foreign_key] = $services_response;
-                                                    }
+                                            if($services_response !== null){
+                                                if(isset($_srvColumns['alias'])){
+                                                    unset($res[$foreign_key]);
+                                                    $res[$_srvColumns['alias']] = $services_response;
+                                                }
+                                                else
+                                                {
+                                                    $res[$foreign_key] = $services_response;
                                                 }
                                             }
                                         }
@@ -580,38 +571,38 @@ Trait QueryController
                                 }
                             }
                         }
+
+                        return $res;
                     }
                     else
                     {
-                        $nums = 0;
-                        foreach($res as $in => $items){
-                            foreach($related as $r_srv){
-                                foreach($r_srv as $srvDetails => $srvColumns){
+                        foreach($res as $in => $yx){
+                            foreach($yx as $items){
+                                $nums = 0;
+                                foreach($related as $srvDetails => $srvColumns){
                                     $services_name_dependency   = explode('@',$srvDetails)[0];
                                     $services_scope_dependency  = explode('@',$srvDetails)[1];
-                                    for ($i=0; $i <= count($srvColumns); $i++) {
-                                        if(isset($srvColumns[$i]['foreign_key'])){
-                                            if(isset($srvColumns[$i]['primary_key'])){
-                                                $type_data = 'string';
-                                                if(isset($srvColumns[$i]['type_data'])){
-                                                    $type_data = $srvColumns[$i]['type_data'];
-                                                }
+                                    foreach($srvColumns as $_srvColumns){
+                                        if(isset($_srvColumns['foreign_key'])){
+                                            if(isset($_srvColumns['primary_key'])){
                                                 // connect to other services
                                                 if(array_key_exists($services_name_dependency,$services_json)){
                                                     $services            = $services_json[$services_name_dependency];
                                                     $services_host       = rtrim($services['host'], '/\\');
                                                     $services_secret_key = $services['secret_key'];
                                                     $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/';
-                                                    $foreign_key         = $srvColumns[$i]['foreign_key'];
+                                                    $foreign_key         = $_srvColumns['foreign_key'];
                                                     $foreign_value       = $items[$foreign_key];
 
-                                                    settype($foreign_value, $type_data);
-
                                                     $requestServices = [
-                                                        'primary_key' => $srvColumns[$i]['primary_key'],
-                                                        'value' => $foreign_value,
-                                                        '_selectColumns' => $srvColumns[$i]['_selectColumns']
+                                                        'primary_key' => $_srvColumns['primary_key'],
+                                                        'value' => $foreign_value
                                                     ];
+
+                                                    if(isset($_srvColumns['_selectColumns'])){
+                                                        $requestServices['_selectColumns'] = $_srvColumns['_selectColumns'];
+                                                    }
+
                                                     $header = [
                                                         'x-services-name' => $services_name_dependency,
                                                         'x-scope-access' => $services_scope_dependency,
@@ -621,13 +612,13 @@ Trait QueryController
                                                     $services_response = $this->get_services($services_url, $services_secret_key, $requestServices, $header);
 
                                                     if($services_response !== null){
-                                                        if(isset($srvColumns[$i]['alias'])){
-                                                            unset($res['data'][$nums][$foreign_key]);
-                                                            $res['data'][$nums][$srvColumns[$i]['alias']] = $services_response;
+                                                        if(isset($_srvColumns['alias'])){
+                                                            unset($res[$in][$nums][$foreign_key]);
+                                                            $res[$in][$nums][$_srvColumns['alias']] = $services_response;
                                                         }
                                                         else
                                                         {
-                                                            $res['data'][$nums][$foreign_key] = $services_response;
+                                                            $res[$in][$nums][$foreign_key] = $services_response;
                                                         }
                                                     }
                                                 }
@@ -635,59 +626,52 @@ Trait QueryController
                                         }
                                     }
                                 }
+                                $nums++;
                             }
-                            $nums++;
                         }
+
+                        return $res;
                     }
                 }
                 else
                 {
                     $nums = 0;
                     foreach($res['data'] as $items){
-                        foreach($related as $r_srv){
-                            foreach($r_srv as $srvDetails => $srvColumns){
-                                $services_name_dependency   = explode('@',$srvDetails)[0];
-                                $services_scope_dependency  = explode('@',$srvDetails)[1];
-                                for ($i=0; $i <= count($srvColumns); $i++) {
-                                    if(isset($srvColumns[$i]['foreign_key'])){
-                                        if(isset($srvColumns[$i]['primary_key'])){
-                                            $type_data = 'string';
-                                            if(isset($srvColumns[$i]['type_data'])){
-                                                $type_data = $srvColumns[$i]['type_data'];
-                                            }
-                                            // connect to other services
-                                            if(array_key_exists($services_name_dependency,$services_json)){
-                                                $services            = $services_json[$services_name_dependency];
-                                                $services_host       = rtrim($services['host'], '/\\');
-                                                $services_secret_key = $services['secret_key'];
-                                                $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/';
-                                                $foreign_key         = $srvColumns[$i]['foreign_key'];
-                                                $foreign_value       = $items[$foreign_key];
+                        foreach($related as $srvDetails => $srvColumns){
+                            $services_name_dependency   = explode('@',$srvDetails)[0];
+                            $services_scope_dependency  = explode('@',$srvDetails)[1];
+                            foreach($srvColumns as $_srvColumns){
+                                if(isset($_srvColumns['foreign_key'])){
+                                    if(isset($_srvColumns['primary_key'])){
+                                        // connect to other services
+                                        if(array_key_exists($services_name_dependency,$services_json)){
+                                            $services            = $services_json[$services_name_dependency];
+                                            $services_host       = rtrim($services['host'], '/\\');
+                                            $services_secret_key = $services['secret_key'];
+                                            $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/';
+                                            $foreign_key         = $_srvColumns['foreign_key'];
+                                            $foreign_value       = $items[$foreign_key];
+                                            $requestServices = [
+                                                'primary_key' => $_srvColumns['primary_key'],
+                                                'value' => $foreign_value,
+                                                '_selectColumns' => $_srvColumns['_selectColumns']
+                                            ];
+                                            $header = [
+                                                'x-services-name' => $services_name_dependency,
+                                                'x-scope-access' => $services_scope_dependency,
+                                                'Authorization' => request()->header('Authorization')
+                                            ];
 
-                                                settype($foreign_value, $type_data);
+                                            $services_response = $this->get_services($services_url, $services_secret_key, $requestServices, $header);
 
-                                                $requestServices = [
-                                                    'primary_key' => $srvColumns[$i]['primary_key'],
-                                                    'value' => $foreign_value,
-                                                    '_selectColumns' => $srvColumns[$i]['_selectColumns']
-                                                ];
-                                                $header = [
-                                                    'x-services-name' => $services_name_dependency,
-                                                    'x-scope-access' => $services_scope_dependency,
-                                                    'Authorization' => request()->header('Authorization')
-                                                ];
-
-                                                $services_response = $this->get_services($services_url, $services_secret_key, $requestServices, $header);
-
-                                                if($services_response !== null){
-                                                    if(isset($srvColumns[$i]['alias'])){
-                                                        unset($res['data'][$nums][$foreign_key]);
-                                                        $res['data'][$nums][$srvColumns[$i]['alias']] = $services_response;
-                                                    }
-                                                    else
-                                                    {
-                                                        $res['data'][$nums][$foreign_key] = $services_response;
-                                                    }
+                                            if($services_response !== null){
+                                                if(isset($_srvColumns['alias'])){
+                                                    unset($res['data'][$nums][$foreign_key]);
+                                                    $res['data'][$nums][$_srvColumns['alias']] = $services_response;
+                                                }
+                                                else
+                                                {
+                                                    $res['data'][$nums][$foreign_key] = $services_response;
                                                 }
                                             }
                                         }
@@ -697,6 +681,8 @@ Trait QueryController
                         }
                         $nums++;
                     }
+
+                    return $res;
                 }
             }
         }
