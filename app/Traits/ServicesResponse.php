@@ -118,7 +118,7 @@ trait ServicesResponse {
 
         $messages = 'Terjadi Kesalahan! Silahkan coba lagi.';
         $trace = null;
-        if(config('APP_DEBUG')){
+        if(config('app.APP_DEBUG')){
             $messages = $e->getMessage();
             $trace = $e->getTrace();
         }

@@ -6,6 +6,7 @@ use App\Traits\ServicesResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Validator;
 
 Trait QueryController
 {
@@ -194,7 +195,7 @@ Trait QueryController
 
             // mengirimkan hasil pencarian kedalam bentuk json
             if($response){
-                return $this->response($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
+                return $this->response($response, Response::HTTP_OK, trans('apps.msg_search_results'));
             }
 
             return $this->error_response(trans('apps.msg_search_not_found'), Response::HTTP_NOT_FOUND);
@@ -212,22 +213,26 @@ Trait QueryController
             $columns    = Schema::getColumnListing($this->model->getTable());
             $request    = request()->all();
 
+            // validation
+            if (isset($request['_rules'])) {
+                $rules = $request['_rules'];
+                $validator = Validator::make($request, $rules);
+                if ($validator->fails()) {
+                    return $this->error_response($validator->errors()->first(), Response::HTTP_BAD_REQUEST);
+                }
+            }
+
             foreach($request as $key => $val){
                 # remove request key if not column in table
                 if(!in_array($key,$columns)){
                     unset($request[$key]);
                 }
-
-                // if in array using password request
-                if($this->auth_request['auth_request']){
-                    if($key == $this->auth_request['auth_key_hash']){
-                        $request[$key] = password_hash($val, PASSWORD_DEFAULT);
-                    }
-                }
             }
 
             $results = $this->model->create($request);
-            return $this->response($results, Response::HTTP_CREATED, trans('apps.msg_store_data'));
+            if($results){
+                return $this->response($results, Response::HTTP_CREATED, trans('apps.msg_store_data'));
+            }
         }
         catch (\Throwable $e) {
             return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
@@ -245,7 +250,7 @@ Trait QueryController
                     $results = $this->services_dependency($results, request()->input('_relatedColumns'));
                 }
             }
-            return $this->response($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
+            return $this->response($results, Response::HTTP_OK, trans('apps.msg_results_show_data'));
         }
         catch (\Throwable $e) {
             return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
@@ -273,7 +278,7 @@ Trait QueryController
                                     $results = $this->services_dependency($results, request()->input('_relatedColumns'));
                                 }
 
-                                return $this->response($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
+                                return $this->response($results, Response::HTTP_OK, trans('apps.msg_results_show_data'));
                             }
                         }
                     }
@@ -303,17 +308,23 @@ Trait QueryController
             $columns = Schema::getColumnListing($this->model->getTable());
             $request = request()->all();
 
+            // validation
+            if (isset($request['_rules'])) {
+                $rules = $request['_rules'];
+                foreach($rules as $items => $val){
+                    $rules[$items] = str_replace('{uuid}', $results->uuid, $val);
+                }
+
+                $validator = Validator::make($request, $rules);
+                if ($validator->fails()) {
+                    return $this->error_response($validator->errors()->first(), Response::HTTP_BAD_REQUEST);
+                }
+            }
+
             foreach($request as $key => $val){
                 # remove request key if not column in table
                 if(!in_array($key,$columns)){
                     unset($request[$key]);
-                }
-
-                // if in array auth_request using password request
-                if($this->auth_request['auth_request']){
-                    if($key == $this->auth_request['auth_key_hash']){
-                        $request[$key] = password_hash($val, PASSWORD_DEFAULT);
-                    }
                 }
             }
 
@@ -503,7 +514,7 @@ Trait QueryController
             }
 
             if($results){
-                return $this->response($results, Response::HTTP_FOUND, trans('apps.msg_results_show_data'));
+                return $this->response($results, Response::HTTP_OK, trans('apps.msg_results_show_data'));
             }
 
             return $this->error_response(trans('apps.msg_null_results'),Response::HTTP_NOT_FOUND);
@@ -527,161 +538,29 @@ Trait QueryController
             if($services_json !== null){
                 if(!isset($res['data'])){
                     if(isset($res['uuid'])){
-                        foreach($related as $srvDetails => $srvColumns){
-                            // setup services dependency
-                            $services_name_dependency   = explode('@',$srvDetails)[0];
-                            $services_scope_dependency  = explode('@',$srvDetails)[1];
-                            foreach($srvColumns as $_srvColumns){
-                                if(isset($_srvColumns['foreign_key'])){
-                                    if(isset($_srvColumns['primary_key'])){
-                                        // connect to other services
-                                        if(array_key_exists($services_name_dependency,$services_json)){
-                                            $services            = $services_json[$services_name_dependency];
-                                            $services_host       = rtrim($services['host'], '/\\');
-                                            $services_secret_key = $services['secret_key'];
-                                            $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/';
-                                            $foreign_key         = $_srvColumns['foreign_key'];
-                                            $foreign_value       = $res[$foreign_key];
-
-                                            $requestServices = [
-                                                'primary_key' => $_srvColumns['primary_key'],
-                                                'value' => $foreign_value,
-                                                '_selectColumns' => $_srvColumns['_selectColumns']
-                                            ];
-                                            $header = [
-                                                'x-services-name' => $services_name_dependency,
-                                                'x-scope-access' => $services_scope_dependency,
-                                                'Authorization' => request()->header('Authorization')
-                                            ];
-
-                                            $services_response = $this->get_services($services_url, $services_secret_key, $requestServices, $header);
-
-                                            if($services_response !== null){
-                                                if(isset($_srvColumns['alias'])){
-                                                    unset($res[$foreign_key]);
-                                                    $res[$_srvColumns['alias']] = $services_response;
-                                                }
-                                                else
-                                                {
-                                                    $res[$foreign_key] = $services_response;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
+                        $res = $this->servicesRelated($res, $related);
                         return $res;
                     }
                     else
                     {
+                        $response = [];
                         foreach($res as $in => $yx){
                             foreach($yx as $items){
-                                $nums = 0;
-                                foreach($related as $srvDetails => $srvColumns){
-                                    $services_name_dependency   = explode('@',$srvDetails)[0];
-                                    $services_scope_dependency  = explode('@',$srvDetails)[1];
-                                    foreach($srvColumns as $_srvColumns){
-                                        if(isset($_srvColumns['foreign_key'])){
-                                            if(isset($_srvColumns['primary_key'])){
-                                                // connect to other services
-                                                if(array_key_exists($services_name_dependency,$services_json)){
-                                                    $services            = $services_json[$services_name_dependency];
-                                                    $services_host       = rtrim($services['host'], '/\\');
-                                                    $services_secret_key = $services['secret_key'];
-                                                    $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/';
-                                                    $foreign_key         = $_srvColumns['foreign_key'];
-                                                    $foreign_value       = $items[$foreign_key];
-
-                                                    $requestServices = [
-                                                        'primary_key' => $_srvColumns['primary_key'],
-                                                        'value' => $foreign_value
-                                                    ];
-
-                                                    if(isset($_srvColumns['_selectColumns'])){
-                                                        $requestServices['_selectColumns'] = $_srvColumns['_selectColumns'];
-                                                    }
-
-                                                    $header = [
-                                                        'x-services-name' => $services_name_dependency,
-                                                        'x-scope-access' => $services_scope_dependency,
-                                                        'Authorization' => request()->header('Authorization')
-                                                    ];
-
-                                                    $services_response = $this->get_services($services_url, $services_secret_key, $requestServices, $header);
-
-                                                    if($services_response !== null){
-                                                        if(isset($_srvColumns['alias'])){
-                                                            unset($res[$in][$nums][$foreign_key]);
-                                                            $res[$in][$nums][$_srvColumns['alias']] = $services_response;
-                                                        }
-                                                        else
-                                                        {
-                                                            $res[$in][$nums][$foreign_key] = $services_response;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                $nums++;
+                                $response[$in] = $this->servicesRelated($items, $related);
                             }
                         }
-
+                        $res = $response;
                         return $res;
                     }
                 }
                 else
                 {
-                    $nums = 0;
-                    foreach($res['data'] as $items){
-                        foreach($related as $srvDetails => $srvColumns){
-                            $services_name_dependency   = explode('@',$srvDetails)[0];
-                            $services_scope_dependency  = explode('@',$srvDetails)[1];
-                            foreach($srvColumns as $_srvColumns){
-                                if(isset($_srvColumns['foreign_key'])){
-                                    if(isset($_srvColumns['primary_key'])){
-                                        // connect to other services
-                                        if(array_key_exists($services_name_dependency,$services_json)){
-                                            $services            = $services_json[$services_name_dependency];
-                                            $services_host       = rtrim($services['host'], '/\\');
-                                            $services_secret_key = $services['secret_key'];
-                                            $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/';
-                                            $foreign_key         = $_srvColumns['foreign_key'];
-                                            $foreign_value       = $items[$foreign_key];
-                                            $requestServices = [
-                                                'primary_key' => $_srvColumns['primary_key'],
-                                                'value' => $foreign_value,
-                                                '_selectColumns' => $_srvColumns['_selectColumns']
-                                            ];
-                                            $header = [
-                                                'x-services-name' => $services_name_dependency,
-                                                'x-scope-access' => $services_scope_dependency,
-                                                'Authorization' => request()->header('Authorization')
-                                            ];
-
-                                            $services_response = $this->get_services($services_url, $services_secret_key, $requestServices, $header);
-
-                                            if($services_response !== null){
-                                                if(isset($_srvColumns['alias'])){
-                                                    unset($res['data'][$nums][$foreign_key]);
-                                                    $res['data'][$nums][$_srvColumns['alias']] = $services_response;
-                                                }
-                                                else
-                                                {
-                                                    $res['data'][$nums][$foreign_key] = $services_response;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        $nums++;
+                    $response = [];
+                    foreach($res['data'] as $index => $val){
+                        $response[$index] = $this->servicesRelated($val, $related);
                     }
 
+                    $res['data'] = $response;
                     return $res;
                 }
             }
@@ -692,16 +571,86 @@ Trait QueryController
     }
 
     /*
+        Services Related process
+    */
+    protected function servicesRelated($res, $related){
+        $services_json = null;
+        if(file_exists(base_path('services.json'))){
+            $services_files = @file_get_contents(base_path('services.json'));
+            $services_json = json_decode($services_files,true);
+            // if using show response data
+            if($services_json !== null){
+                foreach($related as $srvDetails => $srvColumns){
+                    $services_name_dependency   = explode('@',$srvDetails)[0];
+                    $services_scope_dependency  = explode('@',$srvDetails)[1];
+                    foreach($srvColumns as $_srvColumns){
+                        if(isset($_srvColumns['foreign_key'])){
+                            if(isset($_srvColumns['primary_key'])){
+                                // connect to other services
+                                if(array_key_exists($services_name_dependency,$services_json)){
+                                    $services            = $services_json[$services_name_dependency];
+                                    $services_host       = rtrim($services['host'], '/\\');
+                                    $services_secret_key = $services['secret_key'];
+                                    $services_url        = $services_host . '/' . $services_scope_dependency . '/' . 'ServicesConsume/';
+                                    $foreign_key         = $_srvColumns['foreign_key'];
+                                    $foreign_value       = $res[$foreign_key];
+                                    $requestServices = [
+                                        'primary_key' => $_srvColumns['primary_key'],
+                                        'value' => $foreign_value
+                                    ];
+
+                                    if(isset($_srvColumns['_selectColumns'])){
+                                        $requestServices['_selectColumns'] = $_srvColumns['_selectColumns'];
+                                    }
+
+                                    /*
+                                        header for services-api
+                                        $header = [
+                                            'x-services-name' => $services_name_dependency,
+                                            'x-scope-access' => $services_scope_dependency,
+                                            'Authorization' => request()->header('Authorization'),
+                                            'x-services-secret-key' => $services_secret_key,
+                                            'x-sandbox-mode' => Aplikasi::sandbox()
+                                        ];
+                                    */
+
+                                    $header = [
+                                        'x-services-secret-key' => $services_secret_key,
+                                        'x-sandbox-mode' => request()->header('x-sandbox-mode')
+                                    ];
+
+                                    $services_response = $this->get_services($services_url, $requestServices, $header);
+
+                                    if($services_response !== null){
+                                        if(isset($_srvColumns['alias'])){
+                                            unset($res[$foreign_key]);
+                                            $res[$_srvColumns['alias']] = $services_response;
+                                        }
+                                        else
+                                        {
+                                            $res[$foreign_key] = $services_response;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return $res;
+    }
+
+    /*
         get Services Consume Dependency call
     */
-    protected function get_services($url, $secret_key, $request = null){
+    protected function get_services($url, $request = null, $header = null){
         try {
-            $mode   = request()->header('x-sandbox-mode');
-            $res = Http::withHeaders([
-                'x-services-secret-key' => $secret_key,
-                'x-sandbox-mode' => $mode
-            ])->put($url, $request);
+
+            $res = Http::withHeaders($header)->put($url, $request);
             $body = json_decode($res->body());
+
             return $body->results;
 
         } catch (\Throwable $th) {
@@ -831,7 +780,7 @@ Trait QueryController
             if(isset($countResults['count_all'])){
 
                 if($countResults['count_all']){
-                    return $this->response($result->count(), Response::HTTP_FOUND, trans('apps.msg_search_results'));
+                    return $this->response($result->count(), Response::HTTP_OK, trans('apps.msg_search_results'));
                 }
 
                 return $this->error_response('nilai dari count_all harus true');
@@ -870,7 +819,7 @@ Trait QueryController
                     }
 
                     if($response){
-                        return $this->response($response, Response::HTTP_FOUND, trans('apps.msg_search_results'));
+                        return $this->response($response, Response::HTTP_OK, trans('apps.msg_search_results'));
                     }
 
                     return $this->error_response('nilai dari _responseResults tidak valid!');
