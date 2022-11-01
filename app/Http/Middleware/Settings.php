@@ -3,13 +3,14 @@
 namespace App\Http\Middleware;
 
 use App\Traits\Sandbox;
+use App\Traits\ServicesResponse;
 use Closure;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 
 class Settings
 {
-    use Sandbox;
+    use Sandbox, ServicesResponse;
 
     public function handle($request, Closure $next)
     {
@@ -26,7 +27,7 @@ class Settings
         if(config('app.SERVICES_SECRET_KEY') !== null){
             // check if debug mode true then return progress without services secret key
             if(config("app.APP_DEBUG")){
-                return $next($request);
+                // return $next($request);
             }
 
             // check if secret key from header same with secret key in env variable
@@ -35,11 +36,6 @@ class Settings
             }
         }
 
-        // return unauthorized without secret key
-        return response()->json([
-            'status' => false,
-            'messages' => 'Unauthorized',
-            'results' => null
-        ], 401);
+        return $this->error_response('Invalid Services Secret Key', 401);
     }
 }
