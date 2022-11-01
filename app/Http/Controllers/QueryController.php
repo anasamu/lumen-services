@@ -218,7 +218,7 @@ Trait QueryController
                 $rules = $request['_rules'];
                 $validator = Validator::make($request, $rules);
                 if ($validator->fails()) {
-                    return $this->error_response($validator->errors()->first(), Response::HTTP_BAD_REQUEST);
+                    return $this->error_response('Request tidak valid', Response::HTTP_BAD_REQUEST, $validator->errors());
                 }
             }
 
@@ -317,7 +317,7 @@ Trait QueryController
 
                 $validator = Validator::make($request, $rules);
                 if ($validator->fails()) {
-                    return $this->error_response($validator->errors()->first(), Response::HTTP_BAD_REQUEST);
+                    return $this->error_response('Request tidak valid', Response::HTTP_BAD_REQUEST, $validator->errors());
                 }
             }
 
