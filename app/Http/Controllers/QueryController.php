@@ -351,7 +351,7 @@ Trait QueryController
 
             }
 
-            return $this->response(null, Response::HTTP_NO_CONTENT, trans('apps.msg_delete_data_success'));
+            return $this->response(null, Response::HTTP_OK, trans('apps.msg_delete_data_success'));
         }
         catch (\Throwable $e) {
             return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
@@ -475,7 +475,7 @@ Trait QueryController
                 $results->restore();
             }
 
-            return $this->response(null, Response::HTTP_NO_CONTENT, trans('apps.msg_restore_trash_success'));
+            return $this->response(null, Response::HTTP_OK, trans('apps.msg_restore_trash_success'));
         }
         catch (\Throwable $e) {
             return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
@@ -492,7 +492,7 @@ Trait QueryController
             {
                 $results->forceDelete();
             }
-            return $this->response(null, Response::HTTP_NO_CONTENT, trans('apps.msg_delete_data_success'));
+            return $this->response(null, Response::HTTP_OK, trans('apps.msg_delete_data_success'));
         }
         catch (\Throwable $e) {
             return $this->error_response($e->getMessage(),Response::HTTP_BAD_REQUEST);
