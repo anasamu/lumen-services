@@ -566,7 +566,13 @@ trait QueryController
                                     $services_response = $this->get_services($services_url, $_srvColumns, $header);
 
                                     if ($services_response !== null) {
-                                        $res[$_srvColumns['alias']] = $services_response;
+                                        if(array_key_exists(1, $services_response)){
+                                            $res[$_srvColumns['alias']] = $services_response;
+                                        }
+                                        else
+                                        {
+                                            $res[$_srvColumns['alias']] = $services_response[0];
+                                        }
                                     }
                                 }
                             }
