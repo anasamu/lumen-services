@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Traits\ServicesResponse;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
@@ -102,9 +103,8 @@ trait QueryController
 
             // fitur pencarian pada table
             $result = $this->selectColumns()->where(function ($q) {
-                return $this->searchColumns($q);
+                $this->searchColumns($q);
             })->where(function ($q) use ($columns) {
-
                 if (request()->input("query")) {
                     if (request()->input('_selectColumns')) {
                         $firstSearch = 0;
@@ -119,7 +119,9 @@ trait QueryController
                                 $firstSearch++;
                             }
                         }
-                    } else {
+                    }
+                    else
+                    {
                         if (isset($this->search_column)) {
                             foreach ($this->search_column as $i => $v) {
                                 if ($i == 0) {
@@ -198,29 +200,31 @@ trait QueryController
     public function store()
     {
         try {
-            $columns    = Schema::getColumnListing($this->model->getTable());
-            $request    = request()->all();
+            return DB::transaction(function () {
+                $columns    = Schema::getColumnListing($this->model->getTable());
+                $request    = request()->all();
 
-            // validation
-            if (isset($request['_rules'])) {
-                $rules = $request['_rules'];
-                $validator = Validator::make($request, $rules);
-                if ($validator->fails()) {
-                    return $this->error_response('Request tidak valid', Response::HTTP_BAD_REQUEST, $validator->errors());
+                // validation
+                if (isset($request['_rules'])) {
+                    $rules = $request['_rules'];
+                    $validator = Validator::make($request, $rules);
+                    if ($validator->fails()) {
+                        return $this->error_response('Request tidak valid', Response::HTTP_BAD_REQUEST, $validator->errors());
+                    }
                 }
-            }
 
-            foreach ($request as $key => $val) {
-                # remove request key if not column in table
-                if (!in_array($key, $columns)) {
-                    unset($request[$key]);
+                foreach ($request as $key => $val) {
+                    # remove request key if not column in table
+                    if (!in_array($key, $columns)) {
+                        unset($request[$key]);
+                    }
                 }
-            }
 
-            $results = $this->model->create($request);
-            if ($results) {
-                return $this->response($results, Response::HTTP_CREATED, trans('apps.msg_store_data'));
-            }
+                $results = $this->model->create($request);
+                if ($results) {
+                    return $this->response($results, Response::HTTP_CREATED, trans('apps.msg_store_data'));
+                }
+            });
         } catch (\Throwable $e) {
             return $this->error_response($e->getMessage(), Response::HTTP_BAD_REQUEST);
         }
@@ -289,34 +293,39 @@ trait QueryController
     public function update($uuid)
     {
         try {
-            $results = $this->model->findOrFail($uuid);
-            $columns = Schema::getColumnListing($this->model->getTable());
-            $request = request()->all();
 
-            // validation
-            if (isset($request['_rules'])) {
-                $rules = $request['_rules'];
-                foreach ($rules as $items => $val) {
-                    $rules[$items] = str_replace('{uuid}', $results->uuid, $val);
+            return DB::transaction(function () use($uuid){
+                $results = $this->model->findOrFail($uuid);
+                $columns = Schema::getColumnListing($this->model->getTable());
+                $request = request()->all();
+
+                // validation
+                if (isset($request['_rules'])) {
+                    $rules = $request['_rules'];
+                    foreach ($rules as $items => $val) {
+                        $rules[$items] = str_replace('{uuid}', $results->uuid, $val);
+                    }
+
+                    $validator = Validator::make($request, $rules);
+                    if ($validator->fails()) {
+                        return $this->error_response('Request tidak valid', Response::HTTP_BAD_REQUEST, $validator->errors());
+                    }
                 }
 
-                $validator = Validator::make($request, $rules);
-                if ($validator->fails()) {
-                    return $this->error_response('Request tidak valid', Response::HTTP_BAD_REQUEST, $validator->errors());
+                foreach ($request as $key => $val) {
+                    # remove request key if not column in table
+                    if (!in_array($key, $columns)) {
+                        unset($request[$key]);
+                    }
                 }
-            }
 
-            foreach ($request as $key => $val) {
-                # remove request key if not column in table
-                if (!in_array($key, $columns)) {
-                    unset($request[$key]);
+                if ($results->update($request)) {
+                    return $this->response($results, Response::HTTP_CREATED, trans('apps.msg_update_data'));
                 }
-            }
 
-            if ($results->update($request)) {
-                return $this->response($results, Response::HTTP_CREATED, trans('apps.msg_update_data'));
-            }
-            return $this->error_response(trans('apps.msg_update_data_failed'), Response::HTTP_NOT_FOUND);
+                return $this->error_response(trans('apps.msg_update_data_failed'), Response::HTTP_NOT_FOUND);
+            });
+
         } catch (\Throwable $e) {
             return $this->error_response($e->getMessage(), Response::HTTP_BAD_REQUEST);
         }
@@ -328,14 +337,16 @@ trait QueryController
     public function delete($uuid)
     {
         try {
-            $results = $this->model->findOrFail($uuid);
-            if ($results->delete()) {
-                if (request()->input('forced_delete') == "yes") {
-                    $results->forceDelete();
+            return DB::transaction(function () use ($uuid) {
+                $results = $this->model->findOrFail($uuid);
+                if ($results->delete()) {
+                    if (request()->input('forced_delete') == "yes") {
+                        $results->forceDelete();
+                    }
                 }
-            }
 
-            return $this->response(null, Response::HTTP_OK, trans('apps.msg_delete_data_success'));
+                return $this->response(null, Response::HTTP_OK, trans('apps.msg_delete_data_success'));
+            });
         } catch (\Throwable $e) {
             return $this->error_response($e->getMessage(), Response::HTTP_BAD_REQUEST);
         }
@@ -441,12 +452,15 @@ trait QueryController
     public function trashRestore($uuid)
     {
         try {
-            $results = $this->model->withTrashed()->findOrFail($uuid);
-            if ($results->trashed()) {
-                $results->restore();
-            }
+            return DB::transaction(function () use($uuid) {
+                $results = $this->model->withTrashed()->findOrFail($uuid);
+                if ($results->trashed()) {
+                    $results->restore();
+                }
 
-            return $this->response(null, Response::HTTP_OK, trans('apps.msg_restore_trash_success'));
+                return $this->response(null, Response::HTTP_OK, trans('apps.msg_restore_trash_success'));
+            });
+
         } catch (\Throwable $e) {
             return $this->error_response($e->getMessage(), Response::HTTP_BAD_REQUEST);
         }
@@ -458,18 +472,20 @@ trait QueryController
     public function trashDelete($uuid)
     {
         try {
-            $results = $this->model->withTrashed()->findOrFail($uuid);
-            if ($results->trashed()) {
-                $results->forceDelete();
-            }
-            return $this->response(null, Response::HTTP_OK, trans('apps.msg_delete_data_success'));
+            return DB::transaction(function () use($uuid) {
+                $results = $this->model->withTrashed()->findOrFail($uuid);
+                if ($results->trashed()) {
+                    $results->forceDelete();
+                }
+                return $this->response(null, Response::HTTP_OK, trans('apps.msg_delete_data_success'));
+            });
+
         } catch (\Throwable $e) {
             return $this->error_response($e->getMessage(), Response::HTTP_BAD_REQUEST);
         }
     }
 
-
-    /*
+        /*
         Services Consume Dependency out
     */
     protected function services_dependency($response, $related)
@@ -490,10 +506,12 @@ trait QueryController
 
                     $res['data'] = $response;
                     return $res;
-                } else {
-                    if (array_key_exists(0, $res)) {
-                        if (count($res) > 0) {
-                            foreach ($res as $index => $val) {
+                }
+                else
+                {
+                    if(array_key_exists(0, $res)){
+                        if(count($res) > 0){
+                            foreach($res as $index => $val){
                                 $res[$index] = $this->servicesRelated($val, $related);
                             }
 
@@ -502,7 +520,9 @@ trait QueryController
 
                         $res = $this->servicesRelated($res, $related);
                         return $res;
-                    } else {
+                    }
+                    else
+                    {
                         $response = [];
                         foreach ($res as $in => $yx) {
                             foreach ($yx as $items) {
@@ -547,7 +567,7 @@ trait QueryController
                                     $foreign_value          = $res[$foreign_key];
                                     $_srvColumns['value']   = $foreign_value;
 
-                                    if ($services_name_dependency === 'services-api') {
+                                    if($services_name_dependency === 'services-api'){
                                         $header = [
                                             'x-services-name' => $services_name_dependency,
                                             'x-scope-access' => $services_scope_dependency,
@@ -556,7 +576,9 @@ trait QueryController
                                             'x-sandbox-mode' => request()->header('x-sandbox-mode'),
                                             'x-api-key' => request()->header('x-api-key'),
                                         ];
-                                    } else {
+                                    }
+                                    else
+                                    {
                                         $header = [
                                             'x-services-secret-key' => $services_secret_key,
                                             'x-sandbox-mode' => request()->header('x-sandbox-mode')
@@ -566,10 +588,10 @@ trait QueryController
                                     $services_response = $this->get_services($services_url, $_srvColumns, $header);
 
                                     if ($services_response !== null) {
-                                        if(array_key_exists(1, $services_response)){
+                                        if(isset($services_response[1])){
                                             $res[$_srvColumns['alias']] = $services_response;
                                         }
-                                        else
+                                        elseif(isset($services_response[0]))
                                         {
                                             $res[$_srvColumns['alias']] = $services_response[0];
                                         }
@@ -630,8 +652,7 @@ trait QueryController
     /*
         select columns secara spesifik
     */
-    protected function selectColumns()
-    {
+    protected function selectColumns() {
         $columns = Schema::getColumnListing($this->model->getTable());
         if (request()->input('_selectColumns')) {
             if (is_array(request()->input('_selectColumns'))) {
