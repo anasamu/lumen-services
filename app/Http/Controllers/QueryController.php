@@ -485,7 +485,7 @@ trait QueryController
         }
     }
 
-        /*
+    /*
         Services Consume Dependency out
     */
     protected function services_dependency($response, $related)
